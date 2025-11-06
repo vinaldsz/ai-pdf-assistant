@@ -1,4 +1,4 @@
-# pdf_assistant (project)
+# pdf_assistant
 
 ## Purpose & motivation
 
