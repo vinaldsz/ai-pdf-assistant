@@ -1,0 +1,14 @@
+# Project dependencies
+# Install with: pip install -r requirements.txt
+python-dotenv>=1.0.0
+duckduckgo-search
+fastapi[standard]
+groq
+pgvector
+pypdf
+psycopg[binary]
+sqlalchemy
+yfinance
+duckduckgo-search
+google-generativeai
+streamlit
