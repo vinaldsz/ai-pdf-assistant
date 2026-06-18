@@ -67,23 +67,27 @@ ai-pdf-assistant/
 - [ ] Add Alembic; create `migrations/` and baseline migration
 - [ ] Schema: `documents(id, sha256 UNIQUE, source_url, title, pages, created_at, embedder_version, chunker_version)`
 - [ ] Schema: `chunks(id, doc_id FK, page, text, embedding vector(384), tsv tsvector)`
-- [ ] Indexes: HNSW on `chunks.embedding` (cosine); GIN on `chunks.tsv`
+- [ ] Run `CREATE EXTENSION IF NOT EXISTS vector` as the first statement in the baseline migration (required before creating `vector` columns on Neon and fresh local DBs)
+- [ ] Indexes: HNSW on `chunks.embedding` (cosine) with `m=16, ef_construction=64`; GIN on `chunks.tsv` — use explicit params, pgvector defaults are conservative for 384-dim vectors
 - [ ] `app/ingest/pdf.py`: download → sha256 → skip if exists → pypdf parse → recursive chunker → batch embed → bulk insert
 - [ ] Recursive chunker in `app/rag/chunker.py` (configurable size/overlap)
 
 ## Day 3 — Local embeddings + retriever
 - [ ] `app/rag/embedder.py`: lazy-loaded `BAAI/bge-small-en-v1.5` via `sentence-transformers`; batch encode; CPU-friendly
+- [ ] Pre-warm embedder at startup (call `encode(["warmup"])` during app lifespan) so the first real request doesn't block for 5–15s while the model loads from disk; `/ready` should only return 200 after warm-up completes
 - [ ] `app/rag/store.py`: pgvector read/write helpers using SQLAlchemy + asyncpg pool
 - [ ] `app/rag/retriever.py`: dense (cosine via pgvector) + sparse (`ts_rank_cd`) → reciprocal rank fusion
 - [ ] Below-threshold short-circuit: if best score < `MIN_SIMILARITY`, return "I don't know" path
 
 ## Day 4 — Generator + FastAPI routes
 - [ ] `app/rag/generator.py`: prompt builder w/ retrieved chunks + Groq call via `groq` SDK directly
+- [ ] Enforce a hard token ceiling in the prompt builder (regardless of `RERANK_K` config) so a misconfigured reranker or disabled rerank flag cannot silently overflow the context window
 - [ ] `tenacity` retries on 429/5xx; per-call timeout (20s)
 - [ ] `app/main.py`: FastAPI app, request ID middleware, exception handler that returns opaque error IDs (never tracebacks)
 - [ ] `POST /query` → `{answer, citations: [{doc_id, page, snippet, score}]}`
 - [ ] `POST /index` → enqueues with `BackgroundTasks`; returns job ID
-- [ ] `GET /health` (process alive), `GET /ready` (DB + Groq 1-token check)
+- [ ] `GET /jobs/{id}` → simple in-memory status dict (`queued | running | done | failed`); without this users have no visibility into silent ingestion failures
+- [ ] `GET /health` (process alive), `GET /ready` (DB + Groq 1-token check + embedder warm)
 
 ## Day 5 — Dockerize + local compose
 - [ ] Multi-stage `Dockerfile`: uv → wheels stage → slim runtime
@@ -121,7 +125,7 @@ ai-pdf-assistant/
 - [ ] `pytest` unit tests: chunker boundaries, retriever fusion math, prompt builder
 - [ ] Integration tests using `testcontainers` (real pgvector in CI)
 - [ ] `.github/workflows/ci.yml`: `ruff` lint, `mypy`/`pyright`, `pytest`, `pip-audit`, `bandit`
-- [ ] Eval job runs on PR (warn-only initially; gate later)
+- [ ] Eval job runs on PR (warn-only initially; gate later) — note: eval uses Groq as both generator and Ragas judge; a 30-question set can consume 50–100 Groq requests per run, so consider running on a schedule rather than every PR push to avoid exhausting the 1M token/day free quota
 - [ ] Build + push image to GHCR on push to `main`
 
 ## Day 10 — Cloudflare R2 for PDFs
@@ -150,6 +154,7 @@ ai-pdf-assistant/
 - [ ] Confirm no tracebacks leak in responses (only opaque error IDs)
 - [ ] SSRF guard on `/index` URL ingestion: `https` only, block RFC1918 / 169.254.169.254 / link-local
 - [ ] Input validation: max prompt length, strip control chars
+- [x] PDF size guard in `app/ingest/pdf.py`: HEAD request checks `Content-Length` before download; second check on actual body size in case server omits the header (limit: 50 MB)
 - [ ] Sentry SDK wired (free tier, 5k events/mo)
 - [ ] Pin and audit dependencies (`pip-audit`)
 

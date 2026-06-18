@@ -9,9 +9,14 @@ authors = [{ name = "Vinal Dsouza" }]
 
 # Runtime deps grow per Day in plan.md. Day 1 only needs settings.
 dependencies = [
+    "alembic>=1.13,<2",
+    "asyncpg>=0.29,<1",
+    "httpx>=0.27,<1",
     "pydantic>=2.7,<3",
     "pydantic-settings>=2.4,<3",
+    "pypdf>=4.0,<5",
     "python-dotenv>=1.0,<2",
+    "sqlalchemy[asyncio]>=2.0,<3",
 ]
 
 [project.optional-dependencies]
