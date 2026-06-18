@@ -55,17 +55,19 @@ async def ingest_bytes(pdf_bytes: bytes, *, source_url: str) -> IngestResult:
     texts = [c.text for c in chunks]
 
     from app.rag import embedder  # implemented Day 3
-    vectors = embedder.encode_batch(texts)
+    loop = asyncio.get_running_loop()
+    vectors: list[list[float]] = await loop.run_in_executor(None, embedder.encode_batch, texts)
 
-    doc_id = await store.insert_document(
+    doc_id = await store.insert_document_with_chunks(
         sha256=sha256,
         source_url=source_url,
         title=_extract_title(pdf_bytes),
         pages=len(pages),
         embedder_version=settings.embedding_model,
         chunker_version=CHUNKER_VERSION,
+        chunks=chunks,
+        vectors=vectors,
     )
-    await store.bulk_insert_chunks(doc_id=doc_id, chunks=chunks, vectors=vectors)
     return IngestResult(doc_id=doc_id, skipped=False, chunk_count=len(chunks))
 
 

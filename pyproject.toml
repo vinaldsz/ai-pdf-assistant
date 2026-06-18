@@ -12,10 +12,12 @@ dependencies = [
     "alembic>=1.13,<2",
     "asyncpg>=0.29,<1",
     "httpx>=0.27,<1",
+    "pgvector>=0.3,<1",
     "pydantic>=2.7,<3",
     "pydantic-settings>=2.4,<3",
     "pypdf>=4.0,<5",
     "python-dotenv>=1.0,<2",
+    "sentence-transformers>=3.0,<4",
     "sqlalchemy[asyncio]>=2.0,<3",
 ]
 
@@ -50,3 +52,6 @@ warn_unreachable = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "slow: marks tests that load ML models (~90 MB download on first run); deselect with -m 'not slow'",
+]
