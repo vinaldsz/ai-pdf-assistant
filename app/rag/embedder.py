@@ -3,14 +3,19 @@ from __future__ import annotations
 
 import asyncio
 from functools import lru_cache
-
-from sentence_transformers import SentenceTransformer
+from typing import TYPE_CHECKING
 
 from app.settings import settings
+
+if TYPE_CHECKING:
+    from sentence_transformers import SentenceTransformer
+
+_warmed: bool = False  # set True after warmup(); checked by /ready
 
 
 @lru_cache(maxsize=1)
 def _model() -> SentenceTransformer:
+    from sentence_transformers import SentenceTransformer  # lazy — avoids torch at import time
     return SentenceTransformer(settings.embedding_model)
 
 
@@ -24,5 +29,7 @@ def encode_batch(texts: list[str]) -> list[list[float]]:
 
 async def warmup() -> None:
     """Load and warm the model so the first real request doesn't stall the event loop."""
+    global _warmed
     loop = asyncio.get_running_loop()
     await loop.run_in_executor(None, encode_batch, ["warmup"])
+    _warmed = True

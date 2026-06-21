@@ -4,8 +4,10 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 
-from app.rag import embedder, store
 from app.settings import settings
+
+# embedder and store imported lazily inside retrieve() — keeps this module import-time cheap
+# (no sentence-transformers or asyncpg loaded until retrieve() is actually called).
 
 _RRF_K = 60  # standard RRF constant; higher = smoother rank blending
 
@@ -25,6 +27,8 @@ async def retrieve(query: str, *, top_k: int | None = None) -> list[RetrievalRes
     Returns an empty list when the best dense score < MIN_SIMILARITY (triggers
     the "I don't know" path in the generator — no LLM call is made).
     """
+    from app.rag import embedder, store  # noqa: PLC0415
+
     k = top_k if top_k is not None else settings.top_k
 
     # Embed query in a thread — encode_batch is CPU-bound and would block the event loop

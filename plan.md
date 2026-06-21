@@ -87,15 +87,15 @@ ai-pdf-assistant/
 
 ## Day 4 — Generator + FastAPI routes
 
-- [ ] `app/rag/generator.py`: prompt builder w/ retrieved chunks + Groq call via `groq` SDK directly
-- [ ] Enforce a hard token ceiling in the prompt builder (regardless of `RERANK_K` config) so a misconfigured reranker or disabled rerank flag cannot silently overflow the context window
-- [ ] `tenacity` retries on 429/5xx; per-call timeout (20s)
-- [ ] `app/main.py`: FastAPI app, request ID middleware, exception handler that returns opaque error IDs (never tracebacks)
-- [ ] `POST /query` → `{answer, citations: [{doc_id, page, snippet, score}]}`
-- [ ] `POST /index` → enqueues with `BackgroundTasks`; returns job ID
-- [ ] `GET /jobs/{id}` → simple in-memory status dict (`queued | running | done | failed`); without this users have no visibility into silent ingestion failures
-- [ ] `GET /health` (process alive), `GET /ready` (DB + Groq 1-token check + embedder warm)
-- [ ] **Tests:** `tests/test_generator.py` — prompt builder enforces token ceiling regardless of chunk count; `tests/test_routes.py` — `/health` returns 200; `/ready` returns 503 when DB unreachable; `/query` with empty retrieval returns "I don't know" without calling Groq (mock Groq client asserts zero calls)
+- [x] `app/rag/generator.py`: prompt builder w/ retrieved chunks + Groq call via `groq` SDK directly
+- [x] Enforce a hard token ceiling in the prompt builder (regardless of `RERANK_K` config) so a misconfigured reranker or disabled rerank flag cannot silently overflow the context window
+- [x] `tenacity` retries on 429/5xx; per-call timeout (20s)
+- [x] `app/main.py`: FastAPI app, request ID middleware, exception handler that returns opaque error IDs (never tracebacks)
+- [x] `POST /query` → `{answer, citations: [{doc_id, page, snippet, score}]}`
+- [x] `POST /index` → enqueues with `BackgroundTasks`; returns job ID
+- [x] `GET /jobs/{id}` → simple in-memory status dict (`queued | running | done | failed`); without this users have no visibility into silent ingestion failures
+- [x] `GET /health` (process alive), `GET /ready` (DB + Groq 1-token check + embedder warm)
+- [x] **Tests:** `tests/test_generator.py` — prompt builder enforces token ceiling regardless of chunk count; `tests/test_routes.py` — `/health` returns 200; `/ready` returns 503 when DB unreachable; `/query` with empty retrieval returns "I don't know" without calling Groq (mock Groq client asserts zero calls)
 
 ## Day 5 — Dockerize + local compose
 
@@ -103,7 +103,7 @@ ai-pdf-assistant/
 - [ ] `docker-compose.yml`: `pgvector/pgvector:pg16`, API, UI (Langfuse is Cloud, not in compose)
 - [ ] One-command local dev: `docker compose up` brings the whole system up
 - [ ] Verify ingestion + query end-to-end against compose stack
-- [ ] **Tests:** end-to-end smoke against compose stack — ingest a real PDF via `POST /index`, poll until `done`, query it via `POST /query`, assert answer is non-empty and citations reference the correct doc
+- [ ] **Tests:** end-to-end smoke against compose stack — ingest a real PDF via `POST /index`, poll until `done`, query it via `POST /query`, assert answer is non-empty and citations reference the correct doc; assert `/query` round-trip < 5s (catches in-process model latency regressions)
 - [ ] **Dev-machine note (8 GB laptop):** for day-to-day work, prefer running Python natively via `uv run` and only Postgres in Docker — `docker compose` is the reproducible reference, not a daily-driver requirement. Install [OrbStack](https://orbstack.dev/) instead of Docker Desktop on macOS to cut idle VM RAM ~10×.
 
 ## Day 6 — Reranker + citations + Streamlit client
@@ -134,6 +134,7 @@ ai-pdf-assistant/
 - [ ] `eval/run.py`: Ragas with `faithfulness`, `answer_relevancy`, `context_precision`, `context_recall`
 - [ ] Groq as the judge model (uses free quota)
 - [ ] Commit baseline numbers in `eval/baseline.json`
+- [ ] **Performance baseline:** `eval/run.py` also measures and commits per-phase latency (embed, retrieve, rerank, generate) and end-to-end p50/p95 across the 30 gold questions; store in `eval/perf_baseline.json` — CI warns if any phase regresses > 20% vs baseline
 - [ ] Document how to re-run: `python -m eval.run`
 
 ## Day 9 — CI pipeline
