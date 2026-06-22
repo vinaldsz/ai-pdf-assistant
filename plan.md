@@ -99,12 +99,12 @@ ai-pdf-assistant/
 
 ## Day 5 — Dockerize + local compose
 
-- [ ] Multi-stage `Dockerfile`: uv → wheels stage → slim runtime
-- [ ] `docker-compose.yml`: `pgvector/pgvector:pg16`, API, UI (Langfuse is Cloud, not in compose)
-- [ ] One-command local dev: `docker compose up` brings the whole system up
-- [ ] Verify ingestion + query end-to-end against compose stack
-- [ ] **Tests:** end-to-end smoke against compose stack — ingest a real PDF via `POST /index`, poll until `done`, query it via `POST /query`, assert answer is non-empty and citations reference the correct doc; assert `/query` round-trip < 5s (catches in-process model latency regressions)
-- [ ] **Dev-machine note (8 GB laptop):** for day-to-day work, prefer running Python natively via `uv run` and only Postgres in Docker — `docker compose` is the reproducible reference, not a daily-driver requirement. Install [OrbStack](https://orbstack.dev/) instead of Docker Desktop on macOS to cut idle VM RAM ~10×.
+- [x] Multi-stage `Dockerfile`: uv → wheels stage → slim runtime
+- [x] `docker-compose.yml`: `pgvector/pgvector:pg16`, API (Langfuse is Cloud, not in compose); `model_cache` volume persists HF models across restarts
+- [x] `entrypoint.sh`: runs `alembic upgrade head` then starts uvicorn; `.dockerignore` excludes dev artifacts
+- [ ] One-command local dev: `docker compose up` brings the whole system up (verify manually)
+- [x] **Tests:** `tests/test_e2e.py` — ingest a real PDF via `POST /index`, poll until `done`, query via `POST /query`, assert non-empty answer + citations; `/query` round-trip asserted; duplicate index idempotent; below-threshold query short-circuits. Skipped unless `E2E_API_URL` env var is set.
+- [ ] **Dev-machine note (8 GB laptop):** for day-to-day work, prefer running Python natively via `uv run` and only Postgres in Docker — `docker compose` is the reproducible reference, not a daily-driver requirement.
 
 ## Day 6 — Reranker + citations + Streamlit client
 
@@ -170,13 +170,39 @@ ai-pdf-assistant/
 
 ## Day 13 — Hardening
 
-- [ ] `slowapi` rate limiting (10 req/min/IP on `/query`)
+**Rate limiting & abuse**
+
+- [ ] `slowapi` rate limiting: 10 req/min/IP on `/query`, 5 req/min/IP on `/index` — do this before sharing any public URL; one script can exhaust the Groq 30 RPM free-tier quota in seconds
+- [ ] Cap concurrent background ingestion jobs with `asyncio.Semaphore(3)` in `_run_ingestion` — prevents OOM on the 512 MB Fly VM from simultaneous download+embed+write pipelines
+
+**Input validation**
+
+- [ ] `QueryRequest.query`: add `Field(..., min_length=1, max_length=2000)` and a `field_validator` that strips control characters (`ch < " "` except `\t\n`) — closes unbounded CPU spike on embedder and token-burn on Groq
+- [ ] PDF page-count guard in `_parse_pdf`: reject if `len(reader.pages) > 500` before extracting text — a valid 50 MB PDF can produce ~30k chunks otherwise
+
+**Error & info leakage**
+
+- [ ] `app/routes/health.py:27`: replace `f"error: {exc}"` with `"error: unreachable"` — raw asyncpg exceptions can contain DSN passwords in the response body
+- [ ] `app/routes/index.py:66`: catch `ValueError` separately (surface message) vs `Exception` (return generic `"ingestion failed"`) — prevents infra details (hostnames, ports) leaking via `GET /jobs/{id}`
+- [ ] Disable OpenAPI docs in prod: `FastAPI(docs_url=None, redoc_url=None)` when `settings.environment == "prod"`
+
+**SSRF hardening**
+
+- [ ] Block IPv4-mapped IPv6 addresses (`::ffff:169.254.169.254` etc.) by unwrapping `addr.ipv4_mapped` before blocklist check in `_assert_ip_is_public`
+- [ ] DNS rebinding mitigation: resolve hostname once, assert IP, pass resolved IP directly to httpx with `Host` header — eliminates the second DNS lookup between validation and connect (low practical risk for v0.1 but required before prod)
+- [x] SSRF guard already in place: `https`-only, RFC1918 + loopback + `169.254.0.0/16` blocklist, redirect re-validation, 50 MB streaming cap
+
+**PDF parsing safety**
+
+- [ ] Wrap `_parse_pdf` in `run_in_executor` + `asyncio.wait_for(..., timeout=60.0)` — currently runs synchronously in a BackgroundTask on the event loop; a decompression-bomb PDF can stall all other requests
+- [ ] Catch `pypdf.errors.PdfReadError` in `_parse_pdf` and re-raise as `ValueError("PDF could not be read")` — prevents raw pypdf error messages reaching the job store
+
+**Existing items**
+
 - [ ] Confirm no tracebacks leak in responses (only opaque error IDs)
-- [ ] SSRF guard on `/index` URL ingestion: `https` only, block RFC1918 / 169.254.169.254 / link-local
-- [ ] Input validation: max prompt length, strip control chars
-- [x] PDF size guard in `app/ingest/pdf.py`: HEAD request checks `Content-Length` before download; second check on actual body size in case server omits the header (limit: 50 MB)
+- [x] PDF size guard in `app/ingest/pdf.py`: streaming download aborts if body exceeds 50 MB
 - [ ] Sentry SDK wired (free tier, 5k events/mo)
-- [ ] Pin and audit dependencies (`pip-audit`)
+- [ ] Pin and audit dependencies (`pip-audit`); confirm Docker/CI uses `uv sync --frozen`
 
 ## Day 14 — Docs + Runbook
 
