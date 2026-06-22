@@ -108,12 +108,13 @@ ai-pdf-assistant/
 
 ## Day 6 — Reranker + citations + Streamlit client
 
-- [ ] `app/rag/reranker.py`: `BAAI/bge-reranker-base` cross-encoder; rerank top 20 → top 5
-- [ ] Wire reranker into the retrieval pipeline behind a config flag
-- [ ] Citations surfaced in `/query` response and rendered in UI
-- [ ] Rewrite `ui/streamlit_app.py` as pure HTTP client (no Python imports from `app/`)
-- [ ] Server-Sent Events streaming on `/query`; UI renders tokens as they arrive
-- [ ] **Tests:** `tests/test_reranker.py` — reranker returns exactly `RERANK_K` results, ordering differs from input order on a known pair; `/query` response includes `citations` with `doc_id`, `page`, `snippet`, `score` fields; SSE stream produces at least one token before closing
+- [x] `app/rag/reranker.py`: `BAAI/bge-reranker-base` cross-encoder; rerank top 20 → top 5; same lazy-load pattern as embedder; `_warmed` flag; warmup wired into lifespan
+- [x] Wire reranker into `/query` pipeline: retrieve (top-20 RRF) → rerank → top-5 → Groq
+- [x] Citations surfaced in `/query` response (`doc_id`, `page`, `snippet`, `score`)
+- [x] `ui/streamlit_app.py` as pure HTTP client — sidebar PDF indexing with job polling, chat interface calling `/query/stream`
+- [x] `POST /query/stream` SSE endpoint: yields `{"token": "..."}` events then `{"citations": [...], "done": true}`; `generator.generate_stream()` streams tokens from Groq
+- [x] `/ready` updated to check `reranker._warmed` alongside embedder
+- [x] **Tests:** `tests/test_reranker.py` — 5 fast unit tests (mocked model): empty→empty, returns top-k, orders by score descending, k > len returns all, correct query/chunk pairs passed to model; 2 slow tests (real model); `tests/test_routes.py` — updated fixture mocks both warmups, adds reranker warm check test, query pipeline calls reranker before generator, SSE stream test
 
 ## Day 7 — Structured logging + Langfuse
 

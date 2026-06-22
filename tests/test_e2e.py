@@ -74,7 +74,7 @@ async def test_ingest_query_round_trip():
 
     async with httpx.AsyncClient(timeout=30) as client:
         # 1. Submit indexing job
-        r = await client.post(f"{API_URL}/index", json={"source_url": PDF_URL})
+        r = await client.post(f"{API_URL}/index", json={"url": PDF_URL})
         assert r.status_code == 202, f"Index failed: {r.text}"
         job_id = r.json()["job_id"]
         assert job_id
@@ -123,7 +123,7 @@ async def test_duplicate_index_is_idempotent():
     _skip_if_no_api()
 
     async with httpx.AsyncClient(timeout=30) as client:
-        r = await client.post(f"{API_URL}/index", json={"source_url": PDF_URL})
+        r = await client.post(f"{API_URL}/index", json={"url": PDF_URL})
         assert r.status_code == 202
         job_id = r.json()["job_id"]
         job = await _wait_for_job(client, job_id)

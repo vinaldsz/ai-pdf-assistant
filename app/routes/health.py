@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Response
 
-from app.rag import embedder, store
+from app.rag import embedder, reranker, store
 
 router = APIRouter()
 
@@ -26,8 +26,9 @@ async def ready(response: Response) -> dict:  # type: ignore[type-arg]
     except Exception as exc:
         checks["db"] = f"error: {exc}"
 
-    # Embedder warm check — model must be loaded before serving queries
+    # Model warm checks — both must be loaded before serving queries
     checks["embedder"] = "ok" if embedder._warmed else "not warm"
+    checks["reranker"] = "ok" if reranker._warmed else "not warm"
 
     all_ok = all(v == "ok" for v in checks.values())
     if not all_ok:

@@ -16,7 +16,7 @@ _warmed: bool = False  # set True after warmup(); checked by /ready
 @lru_cache(maxsize=1)
 def _model() -> SentenceTransformer:
     from sentence_transformers import SentenceTransformer  # lazy — avoids torch at import time
-    return SentenceTransformer(settings.embedding_model)
+    return SentenceTransformer(settings.embedding_model, device="cpu")
 
 
 def encode_batch(texts: list[str]) -> list[list[float]]:

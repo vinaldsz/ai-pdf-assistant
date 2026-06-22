@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, AsyncGenerator
 
 from groq import APIStatusError, AsyncGroq
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
@@ -10,8 +10,6 @@ from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponen
 from app.settings import settings
 
 if TYPE_CHECKING:
-    # RetrievalResult only needed for type hints — avoids pulling in sentence-transformers
-    # at import time when generator.py is imported without actually running inference.
     from app.rag.retriever import RetrievalResult
 
 # Hard ceiling on context fed to the LLM — prevents context overflow regardless of
@@ -33,6 +31,13 @@ class GeneratorResponse:
 
 def _is_retryable(exc: BaseException) -> bool:
     return isinstance(exc, APIStatusError) and exc.status_code in (429, 500, 502, 503, 504)
+
+
+def _build_messages(query: str, context: str) -> list[dict]:  # type: ignore[type-arg]
+    return [
+        {"role": "system", "content": _SYSTEM_PROMPT},
+        {"role": "user", "content": f"Document excerpts:\n\n{context}\n\nQuestion: {query}"},
+    ]
 
 
 @retry(
@@ -57,13 +62,7 @@ async def generate(query: str, chunks: list[RetrievalResult]) -> GeneratorRespon
     client = AsyncGroq(api_key=settings.groq_api_key.get_secret_value())
     response = await client.chat.completions.create(
         model=settings.llm_model,
-        messages=[
-            {"role": "system", "content": _SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": f"Document excerpts:\n\n{context}\n\nQuestion: {query}",
-            },
-        ],
+        messages=_build_messages(query, context),
         temperature=0.1,
         max_tokens=512,
         timeout=20.0,
@@ -71,6 +70,37 @@ async def generate(query: str, chunks: list[RetrievalResult]) -> GeneratorRespon
 
     answer = response.choices[0].message.content or ""
     return GeneratorResponse(answer=answer, citations=citations)
+
+
+@retry(
+    retry=retry_if_exception(_is_retryable),
+    wait=wait_exponential(multiplier=1, min=2, max=30),
+    stop=stop_after_attempt(3),
+    reraise=True,
+)
+async def _create_stream(client: AsyncGroq, messages: list[dict]):  # type: ignore[type-arg]
+    """Retryable stream creation — retry here, not inside the async generator."""
+    return await client.chat.completions.create(
+        model=settings.llm_model,
+        messages=messages,
+        temperature=0.1,
+        max_tokens=512,
+        timeout=20.0,
+        stream=True,
+    )
+
+
+async def generate_stream(
+    query: str, chunks: list[RetrievalResult]
+) -> AsyncGenerator[str, None]:
+    """Stream token strings from Groq. Yields raw token strings one at a time."""
+    context = _build_context(chunks)
+    client = AsyncGroq(api_key=settings.groq_api_key.get_secret_value())
+    stream = await _create_stream(client, _build_messages(query, context))
+    async for chunk in stream:
+        token = chunk.choices[0].delta.content or ""
+        if token:
+            yield token
 
 
 def _build_context(chunks: list[RetrievalResult]) -> str:

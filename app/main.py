@@ -8,13 +8,14 @@ from typing import AsyncGenerator
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from app.rag import embedder
+from app.rag import embedder, reranker
 from app.routes import health, index, query
 
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await embedder.warmup()
+    await reranker.warmup()
     yield
 
 
