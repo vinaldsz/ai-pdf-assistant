@@ -4,10 +4,11 @@ POST /query/stream — same pipeline but streams tokens via Server-Sent Events.
 from __future__ import annotations
 
 import json
+import unicodedata
 
 from fastapi import APIRouter
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from app.obs import langfuse as lf
 from app.obs.logging import get_logger
@@ -22,7 +23,16 @@ _NO_ANSWER = (
 
 
 class QueryRequest(BaseModel):
-    query: str
+    query: str = Field(..., min_length=1, max_length=2000)
+
+    @field_validator("query")
+    @classmethod
+    def _strip_control_chars(cls, v: str) -> str:
+        # Remove C0/C1 control characters (null bytes, escape sequences, etc.)
+        # but keep normal whitespace (\n, \t, space).
+        return "".join(
+            ch for ch in v if unicodedata.category(ch) != "Cc" or ch in "\n\t"
+        )
 
 
 class Citation(BaseModel):

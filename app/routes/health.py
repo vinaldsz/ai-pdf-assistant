@@ -23,8 +23,8 @@ async def ready(response: Response) -> dict:  # type: ignore[type-arg]
         async with pool.acquire() as conn:
             await conn.fetchval("SELECT 1")
         checks["db"] = "ok"
-    except Exception as exc:
-        checks["db"] = f"error: {exc}"
+    except Exception:
+        checks["db"] = "error: unreachable"
 
     # Model warm checks — both must be loaded before serving queries
     checks["embedder"] = "ok" if embedder._warmed else "not warm"

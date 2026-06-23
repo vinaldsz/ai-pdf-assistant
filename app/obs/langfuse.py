@@ -1,8 +1,11 @@
-"""Langfuse observability — optional. All functions are no-ops when keys are absent.
+"""Langfuse v4 observability wrapper — no-op when keys absent.
 
-One trace per /query request. Spans for retrieve, rerank, and generate.
-Import only `get_client` and `trace_context` — never import langfuse directly
-from pipeline modules so the dep stays optional.
+Langfuse v4 uses OpenTelemetry under the hood. The v2 low-level API
+(client.trace() / trace.span()) is gone; everything goes through
+start_as_current_observation() context managers and update_current_span().
+
+One trace per /query request. Spans for retrieve, rerank, generate.
+Import only start_trace / end_trace / span from pipeline modules.
 """
 from __future__ import annotations
 
@@ -12,50 +15,63 @@ from typing import Any
 
 from app.settings import settings
 
-# Holds the active Langfuse trace for the current request (None when Langfuse is off)
-_trace_var: contextvars.ContextVar[Any] = contextvars.ContextVar("langfuse_trace", default=None)
+# Holds the active trace context manager so end_trace() can close it.
+_trace_cm_var: contextvars.ContextVar[Any] = contextvars.ContextVar(
+    "langfuse_trace_cm", default=None
+)
+
+_client_instance: Any = None
 
 
 def _is_enabled() -> bool:
-    return bool(
-        settings.langfuse_public_key and settings.langfuse_secret_key
-    )
+    return bool(settings.langfuse_public_key and settings.langfuse_secret_key)
 
 
-def _client():  # type: ignore[return]
-    """Lazy singleton — only instantiated when keys are present."""
+def _client() -> Any:
+    """Lazy singleton — created once and reused so flush() works on the right instance."""
+    global _client_instance
     if not _is_enabled():
         return None
-    from langfuse import Langfuse  # noqa: PLC0415
-    return Langfuse(
-        public_key=settings.langfuse_public_key.get_secret_value(),  # type: ignore[union-attr]
-        secret_key=settings.langfuse_secret_key.get_secret_value(),  # type: ignore[union-attr]
-        host=settings.langfuse_host,
-    )
+    if _client_instance is None:
+        from langfuse import Langfuse  # noqa: PLC0415
+        _client_instance = Langfuse(
+            public_key=settings.langfuse_public_key.get_secret_value(),  # type: ignore[union-attr]
+            secret_key=settings.langfuse_secret_key.get_secret_value(),  # type: ignore[union-attr]
+            host=settings.langfuse_host,
+        )
+    return _client_instance
 
 
 def start_trace(name: str, input: dict) -> None:  # type: ignore[type-arg]
-    """Start a new Langfuse trace for this request. Stores it in the context var."""
+    """Open a root trace for this request. Stores the context manager in a contextvar."""
     client = _client()
     if client is None:
         return
-    trace = client.trace(name=name, input=input)
-    _trace_var.set(trace)
+    cm = client.start_as_current_observation(name=name, input=input)
+    cm.__enter__()
+    _trace_cm_var.set(cm)
 
 
 def end_trace(output: dict) -> None:  # type: ignore[type-arg]
-    """Update the trace output and flush."""
-    trace = _trace_var.get()
-    if trace is None:
+    """Close the root trace and flush pending events to Langfuse Cloud."""
+    cm = _trace_cm_var.get()
+    if cm is None:
         return
-    trace.update(output=output)
-    _client().flush()  # type: ignore[union-attr]
+    client = _client()
+    if client is not None:
+        try:
+            client.update_current_span(output=output)
+        except Exception:
+            pass
+        cm.__exit__(None, None, None)
+        client.flush()
 
 
 class span:
-    """Context manager that wraps a pipeline step in a Langfuse span.
+    """Sync context manager that wraps a pipeline step in a Langfuse child span.
 
-    Usage:
+    Usage (works inside async functions — sync with blocks can contain awaits):
+
         with span("retrieve", input={"query": q}) as s:
             results = await retrieve(q)
             s.set_output({"count": len(results)})
@@ -64,20 +80,33 @@ class span:
     def __init__(self, name: str, input: dict) -> None:  # type: ignore[type-arg]
         self.name = name
         self.input = input
-        self._span: Any = None
+        self._cm: Any = None
+        self._ended = False
         self._start = time.perf_counter()
 
     def __enter__(self) -> span:
-        trace = _trace_var.get()
-        if trace is not None:
-            self._span = trace.span(name=self.name, input=self.input)
+        client = _client()
+        # Only create a child span when there is an active root trace
+        if client is not None and _trace_cm_var.get() is not None:
+            self._cm = client.start_as_current_observation(
+                name=self.name, input=self.input
+            )
+            self._cm.__enter__()
         return self
 
     def set_output(self, output: dict) -> None:  # type: ignore[type-arg]
-        if self._span is not None:
+        """Record output and latency, then close the span."""
+        if self._ended:
+            return
+        client = _client()
+        if client is not None and self._cm is not None:
             elapsed_ms = int((time.perf_counter() - self._start) * 1000)
-            self._span.end(output={**output, "latency_ms": elapsed_ms})
+            try:
+                client.update_current_span(output={**output, "latency_ms": elapsed_ms})
+            except Exception:
+                pass
+        self._ended = True
 
     def __exit__(self, *_: object) -> None:
-        if self._span is not None and not hasattr(self._span, "_ended"):
-            self._span.end()
+        if self._cm is not None:
+            self._cm.__exit__(None, None, None)

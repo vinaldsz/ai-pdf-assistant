@@ -17,6 +17,7 @@ from app.settings import settings
 
 CHUNKER_VERSION = "recursive-v1"
 MAX_PDF_BYTES = 50 * 1024 * 1024  # 50 MB — keeps peak RAM safe on 512 MB Fly VM
+MAX_PDF_PAGES = 500               # ~30k chunks at this limit; beyond that risks OOM on 512 MB VM
 _MAX_REDIRECTS = 5
 _BLOCKED_NETWORKS = [
     ip_network("10.0.0.0/8"),       # RFC1918 private
@@ -50,12 +51,19 @@ async def ingest_bytes(pdf_bytes: bytes, *, source_url: str) -> IngestResult:
     if existing is not None:
         return IngestResult(doc_id=str(existing["id"]), skipped=True, chunk_count=0)
 
-    pages = _parse_pdf(pdf_bytes)
-    chunks = _chunk_pages(pages)
-    texts = [c.text for c in chunks]
-
     from app.rag import embedder  # implemented Day 3
     loop = asyncio.get_running_loop()
+    # _parse_pdf is CPU-bound (pypdf can be slow on large/complex PDFs); run in a thread
+    # so it cannot block the event loop and stall concurrent requests.
+    try:
+        pages = await asyncio.wait_for(
+            loop.run_in_executor(None, _parse_pdf, pdf_bytes),
+            timeout=60.0,
+        )
+    except asyncio.TimeoutError:
+        raise ValueError("PDF parsing timed out (60 s limit)")
+    chunks = _chunk_pages(pages)
+    texts = [c.text for c in chunks]
     vectors: list[list[float]] = await loop.run_in_executor(None, embedder.encode_batch, texts)
 
     doc_id = await store.insert_document_with_chunks(
@@ -159,6 +167,11 @@ def _parse_pdf(pdf_bytes: bytes) -> list[tuple[int, str]]:
         reader = PdfReader(io.BytesIO(pdf_bytes))
     except Exception as exc:
         raise ValueError(f"PDF could not be parsed: {exc}") from exc
+    if len(reader.pages) > MAX_PDF_PAGES:
+        raise ValueError(
+            f"PDF has {len(reader.pages)} pages (limit {MAX_PDF_PAGES}). "
+            "Split the document and re-submit each part."
+        )
     return [
         (i + 1, text)
         for i, page in enumerate(reader.pages)
