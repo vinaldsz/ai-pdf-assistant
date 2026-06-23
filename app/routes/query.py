@@ -6,8 +6,9 @@ from __future__ import annotations
 import json
 import unicodedata
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
+from groq import APIStatusError
 from pydantic import BaseModel, Field, field_validator
 
 from app.obs import langfuse as lf
@@ -65,9 +66,15 @@ async def query_endpoint(body: QueryRequest) -> QueryResponse:
         reranked = await reranker.rerank(body.query, chunks)
         s.set_output({"count": len(reranked)})
 
-    with lf.span("generate", input={"chunks": len(reranked)}) as s:
-        result = await generator.generate(body.query, reranked)
-        s.set_output({"answer_len": len(result.answer)})
+    try:
+        with lf.span("generate", input={"chunks": len(reranked)}) as s:
+            result = await generator.generate(body.query, reranked)
+            s.set_output({"answer_len": len(result.answer)})
+    except APIStatusError as exc:
+        log.warning("generate.upstream_error", status_code=exc.status_code)
+        lf.end_trace(output={"error": exc.status_code})
+        status = 429 if exc.status_code == 429 else 503
+        raise HTTPException(status_code=status, detail="LLM service temporarily unavailable") from exc
 
     log.info("query.done", citations=len(result.citations))
     lf.end_trace(output={"answer": result.answer[:200]})
@@ -114,11 +121,17 @@ async def query_stream_endpoint(body: QueryRequest) -> StreamingResponse:
 
     async def _stream_sse():
         token_count = 0
-        with lf.span("generate", input={"chunks": len(reranked)}) as s:
-            async for token in generator.generate_stream(body.query, reranked):
-                token_count += 1
-                yield f"data: {json.dumps({'token': token})}\n\n"
-            s.set_output({"tokens": token_count})
+        try:
+            with lf.span("generate", input={"chunks": len(reranked)}) as s:
+                async for token in generator.generate_stream(body.query, reranked):
+                    token_count += 1
+                    yield f"data: {json.dumps({'token': token})}\n\n"
+                s.set_output({"tokens": token_count})
+        except APIStatusError as exc:
+            log.warning("generate.upstream_error", status_code=exc.status_code)
+            lf.end_trace(output={"error": exc.status_code})
+            yield f"data: {json.dumps({'error': 'LLM service temporarily unavailable', 'done': True})}\n\n"
+            return
         lf.end_trace(output={"tokens": token_count, "citations": len(citations)})
         log.info("query.stream.done", tokens=token_count, citations=len(citations))
         yield f"data: {json.dumps({'citations': citations, 'done': True})}\n\n"
