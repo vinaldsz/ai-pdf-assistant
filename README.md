@@ -1,150 +1,224 @@
-# pdf_assistant
+# AI PDF Assistant
 
-## Purpose & motivation
-
-The pdf_assistant project is designed as a compact, easy-to-reproduce example of a retrieval-augmented assistant that can understand and answer questions based on PDF documents. It serves as a developer-friendly demo and a starting point for building production-grade tools that:
-
-- Index content from PDFs (either via URLs or uploaded files) into a vector database for semantic search.
-- Combine information retrieval from a knowledge base with a powerful language model (RAG) to generate grounded, context-aware answers.
-- Showcase how to connect embedders, a pgvector-enabled Postgres database, and an agent-based assistant (phi) with a simple interface for exploration.
-
-Common use cases:
-
-- Prototyping document-based Q&A systems for product manuals, research papers, or legal and policy documents.
-- Building an internal knowledge assistant that can respond to business or team-specific queries from PDFs.
-- Quickly experimenting with different embedders, models, and vector database settings (like dimensions and indexing strategies).
-
-## Quick overview
-
-`pdf_assistant` indexes PDF documents (URLs or local files) into a vector store and exposes an assistant that can answer questions using retrieval-augmented generation (RAG). The code uses the `phi` library, a pgvector-backed PostgreSQL vector database, and an LLM provider (configured via environment variables).
-
-Contents referenced here:
-
-- `pdf_assistant.py` — CLI entrypoint that constructs the knowledge base, DB storage and runs the Agent.
-- `streamlit_app.py` — small Streamlit UI to index PDFs and ask queries.
-- `app_api.py` — programmatic wrapper used by the Streamlit UI.
-
-## Prerequisites
-
-- Python 3.10+ (use the system python or install with Homebrew / pyenv)
-- Docker (optional but recommended for local Postgres + pgvector)
-- git
-
-## Create and activate a virtual environment (recommended)
-
-From the project root:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install --upgrade pip
-pip install -r requirements.txt
-```
-
-If you already have an existing venv in the repo (for example `agentic-ai/`), activate that instead:
-
-```bash
-source agentic-ai/bin/activate
-```
-
-## Environment variables
-
-Copy `.env.example` (if present) to `.env` and fill in real secrets. The project looks for the following variables (examples):
-
-- `GROQ_API_KEY` — Groq API key (if using Groq model provider)
-- `GOOGLE_API_KEY` — Google API key (if using Google embedders)
-- `PHI_API_KEY` — (if required by phi tooling)
-
-Notes:
-
-- Do NOT commit `.env` to version control. Add `.env` to `.gitignore`.
-
-## Run local Postgres + pgvector (recommended)
-
-Start the Docker container used in development (the repo uses image `phidata/pgvector`):
-
-```bash
-docker run -d \
-	-e POSTGRES_DB=ai \
-	-e POSTGRES_USER=ai \
-	-e POSTGRES_PASSWORD=ai \
-	-e PGDATA=/var/lib/postgresql/data/pgdata \
-	-v pgvolume:/var/lib/postgresql/data \
-	-p 5532:5432 \
-	--name pgvector \
-	phidata/pgvector:16
-```
-
-Replace port, credentials and image as needed. The default `db_url` in `pdf_assistant.py` is:
-
-```
-postgresql+psycopg://ai:ai@localhost:5532/ai
-```
-
-If you prefer docker-compose, add a simple `docker-compose.yml` with the above image and environment.
-
-## Run the CLI assistant
-
-Indexing is done automatically when `pdf_assistant.py` constructs the knowledge base. To run the CLI assistant:
-
-```bash
-# from project root, with venv active and docker DB running
-python pdf_assistant.py
-```
-
-This will:
-
-- construct a `PDFUrlKnowledgeBase` using the URL(s) configured in `pdf_assistant.py`
-- create or upsert vectors into the `PgVector2` collection (table)
-- start an interactive assistant CLI
-
-If you add more URLs to the knowledge base or want to re-index, edit the `urls` list in `pdf_assistant.py` or use the Streamlit UI (below) to index additional PDFs.
-
-## Streamlit demo UI
-
-The repository includes a small Streamlit app entrypoint `streamlit_app.py` that uses `app_api.py` to index a URL and run single-turn queries.
-
-Run the Streamlit UI:
-
-```bash
-# with venv activated
-streamlit run streamlit_app.py
-```
-
-Open http://localhost:8501
-
-Notes:
-
-- Indexing is synchronous in the simple demo (it may block the UI for large PDFs). For production, run indexing in a background job.
-- The Streamlit UI displays only the extracted assistant text (the code includes extraction logic to avoid showing internal object reprs).
-
-## Troubleshooting
-
-- Error: expected 1536 dimensions, not 384
-
-  - Cause: your vector DB column was created for 1536-dimensional vectors while the embedder produced 384-dim vectors (or vice-versa). Fix by either:
-    1. Changing the embedder/model to one that returns the DB's expected dimension, or
-    2. Recreate/alter the DB vector column to match the embedder's dimension and re-run indexing.
-
-- Error: provider/tool call failed (e.g. groq BadRequestError / tool_use_failed)
-
-  - The model attempted to call a tool (for example `search_knowledge_base`) and the tool invocation failed. Check:
-    - The tool is registered under the expected name.
-    - The tool accepts the JSON arguments the model sent (e.g. `{"query": "..."}`).
-    - The DB and vector collection exist and are accessible.
-
-- OpenAI / provider API key issues
-  - Ensure your API key is set in `.env` and exported into the environment or mapped at runtime. See the code near the top of `pdf_assistant.py` for mapping behavior.
-
-## Development tips
-
-- Use the Streamlit UI for quick manual indexing and queries during development.
-- If you change embedding model or vector dimension, reindex all documents — dimensions must match across the DB.
-
-## Next steps (optional)
-
-- Add asynchronous indexing in `streamlit_app.py` (background worker) to avoid blocking the UI.
-- Add upload support to the Streamlit app to index local PDF files.
-- Pin dependency versions in `requirements.txt` (optional: add a `requirements-dev.txt` for linters/tests).
+A production-grade RAG service: upload PDFs, ask questions, get grounded answers with page citations. Built entirely on free tiers — $0/month to run.
 
 ---
+
+## Motivation
+
+Most RAG demos are toy examples: one PDF, one embedding call, one LLM call. They work in a notebook but fall apart in practice — hallucinations on out-of-corpus questions, no deduplication, no observability, no way to know why an answer was wrong.
+
+This project builds RAG the way it should be built:
+
+- **Hybrid retrieval** — dense vector search alone misses exact terms (model names, paper IDs, codes). Combining it with sparse full-text search and fusing the results with Reciprocal Rank Fusion gives meaningfully better recall.
+- **Local reranking** — a cross-encoder reranker runs in-process to re-score the top-20 candidates. No API cost, deterministic latency, and a significant quality jump over bi-encoder ranking alone.
+- **Hallucination guard** — if retrieval confidence is too low, the LLM is never called. The system returns "I don't know" rather than inventing an answer.
+- **Built to understand** — no RAG framework wrapping the internals. The full pipeline is ~150 lines of explicit, readable Python so every design choice is visible and changeable.
+
+---
+
+## Overview
+
+The system has two paths:
+
+**Ingestion** — a user submits a PDF URL. The API validates it (SSRF guard, size/page limits), downloads it, deduplicates by SHA-256, splits it into overlapping chunks, embeds each chunk locally, and stores everything in Postgres with a vector index. The API returns a job ID immediately; processing runs in the background.
+
+**Query** — a user asks a question. The query is embedded locally, then retrieved via hybrid search (dense cosine similarity + sparse `tsvector`, fused with RRF). If the best score is below a threshold, the LLM is skipped entirely. Otherwise, a local cross-encoder reranks the top-20 candidates to top-5, which are assembled into a prompt and streamed through Groq's `llama-3.3-70b`. The response includes page-level citations so every claim is traceable back to the source document.
+
+Every request is traced in Langfuse (retrieve → rerank → generate spans with latency and token counts) and logged as structured JSON.
+
+---
+
+## How it works
+
+```
+POST /index  →  download PDF  →  sha256 dedup  →  chunk  →  embed (local)  →  store in pgvector
+POST /query  →  embed query   →  hybrid search (dense + sparse, fused RRF)
+                              →  rerank top-20 → top-5 (local cross-encoder)
+                              →  Groq llama-3.3-70b  →  streamed answer + citations
+```
+
+If retrieval score is below the similarity threshold, the LLM is never called — "I don't know" is returned directly. This prevents hallucinations on out-of-corpus questions and saves Groq quota.
+
+---
+
+## Stack
+
+| Layer | Technology |
+|---|---|
+| API | FastAPI + uvicorn |
+| Embedder | `BAAI/bge-small-en-v1.5` (local, 90 MB) |
+| Reranker | `BAAI/bge-reranker-base` (local, 570 MB) |
+| Vector DB | Neon Postgres + pgvector (HNSW cosine + GIN tsvector) |
+| LLM | Groq `llama-3.3-70b-versatile` (streamed SSE) |
+| PDF storage | Cloudflare R2 |
+| UI | Streamlit |
+| Observability | Langfuse Cloud (traces) + structlog (JSON logs) |
+
+---
+
+## Quick start (local)
+
+**Prerequisites:** Docker, [uv](https://github.com/astral-sh/uv), a Groq API key.
+
+```bash
+# 1. Clone and install
+git clone https://github.com/vinaldsz/ai-pdf-assistant
+cd ai-pdf-assistant
+uv sync
+
+# 2. Start Postgres + pgvector
+docker compose up -d
+
+# 3. Create .env
+cat > .env <<EOF
+GROQ_API_KEY=gsk_...
+DATABASE_URL=postgresql://ai:ai@localhost:5433/ai
+# Optional — Langfuse tracing
+# LANGFUSE_PUBLIC_KEY=pk-lf-...
+# LANGFUSE_SECRET_KEY=sk-lf-...
+EOF
+
+# 4. Run migrations
+uv run alembic upgrade head
+
+# 5. Start the API
+uv run uvicorn app.main:app --reload
+```
+
+The API is now at `http://localhost:8000`. Docs at `http://localhost:8000/docs`.
+
+**Start the UI (optional, separate terminal):**
+
+```bash
+uv run streamlit run ui/streamlit_app.py
+```
+
+---
+
+## Usage
+
+**Index a PDF:**
+```bash
+curl -X POST http://localhost:8000/index \
+  -H "Content-Type: application/json" \
+  -d '{"url": "https://arxiv.org/pdf/1706.03762"}'
+# → {"job_id": "...", "status": "queued"}
+```
+
+**Check job status:**
+```bash
+curl http://localhost:8000/jobs/<job_id>
+# → {"status": "done", "chunk_count": 66}
+```
+
+**Ask a question (streaming):**
+```bash
+curl -N -X POST http://localhost:8000/query/stream \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What is the attention mechanism?"}'
+# → data: {"token": "The"}
+# → data: {"token": " attention"}
+# → ...
+# → data: {"citations": [...], "done": true}
+```
+
+**Ask a question (JSON):**
+```bash
+curl -X POST http://localhost:8000/query \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What is the attention mechanism?"}'
+# → {"answer": "...", "citations": [{"doc_id": "...", "page": 3, "snippet": "...", "score": 0.91}]}
+```
+
+---
+
+## API reference
+
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/health` | Liveness check |
+| `GET` | `/ready` | Readiness check (DB + models warm) |
+| `POST` | `/index` | Submit a PDF URL for indexing |
+| `GET` | `/jobs/{id}` | Poll ingestion job status |
+| `POST` | `/query` | Ask a question, get JSON response |
+| `POST` | `/query/stream` | Ask a question, stream SSE tokens |
+
+---
+
+## Development
+
+```bash
+# Lint + format
+uv run ruff check app/ tests/
+uv run ruff format app/ tests/
+
+# Type check
+uv run mypy app/
+
+# Run all tests
+uv run pytest
+
+# Run a single test file
+uv run pytest tests/test_chunker.py
+
+# Run a single test by name
+uv run pytest tests/test_chunker.py::test_overlap_respected
+
+# Skip slow (real-model) tests
+uv run pytest -m "not slow"
+```
+
+---
+
+## Configuration
+
+All settings live in `app/settings.py` (Pydantic `BaseSettings`). Set via `.env` or environment variables.
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `GROQ_API_KEY` | Yes | — | Groq API key |
+| `DATABASE_URL` | Yes | — | Postgres connection URL |
+| `LANGFUSE_PUBLIC_KEY` | No | — | Enables Langfuse tracing |
+| `LANGFUSE_SECRET_KEY` | No | — | Enables Langfuse tracing |
+| `EMBEDDING_MODEL` | No | `BAAI/bge-small-en-v1.5` | Sentence-transformers model |
+| `RERANKER_MODEL` | No | `BAAI/bge-reranker-base` | Cross-encoder model |
+| `LLM_MODEL` | No | `llama-3.3-70b-versatile` | Groq model ID |
+| `MIN_SIMILARITY` | No | `0.30` | Below this score → "I don't know" |
+| `TOP_K` | No | `20` | Candidates retrieved before reranking |
+| `RERANK_K` | No | `5` | Chunks passed to the LLM |
+| `CHUNK_SIZE` | No | `800` | Characters per chunk |
+| `CHUNK_OVERLAP` | No | `120` | Overlap between chunks |
+
+---
+
+## Free-tier budget
+
+| Service | Limit | Used for |
+|---|---|---|
+| Groq | 30 RPM, ~1M tokens/day | LLM completions |
+| Neon Postgres | 0.5 GB | Chunks + embeddings |
+| Cloudflare R2 | 10 GB, $0 egress | Raw PDF storage |
+| Fly.io | 512 MB RAM | API + local ML models |
+| Hugging Face Spaces | Free CPU | Streamlit UI |
+| Langfuse Cloud | 50k observations/mo | Request tracing |
+
+**Target monthly cost: $0**
+
+---
+
+## Project structure
+
+```
+app/
+  ingest/       # PDF download, SSRF guard, chunking, embedding, store
+  obs/          # structlog JSON logging + Langfuse tracing
+  rag/          # embedder, retriever (hybrid RRF), reranker, generator
+  routes/       # FastAPI route handlers
+  settings.py   # All config via Pydantic BaseSettings
+  main.py       # App factory, middleware, lifespan
+ui/
+  streamlit_app.py   # Streamlit chat UI (pure HTTP, no app/ imports)
+tests/               # pytest unit + integration tests
+migrations/          # Alembic schema migrations
+```
