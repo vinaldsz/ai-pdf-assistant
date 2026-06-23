@@ -131,12 +131,12 @@ ai-pdf-assistant/
 
 ## Day 8 — Eval harness
 
-- [ ] Write `eval/gold.jsonl` — 30 (question, expected_doc, expected_answer) pairs from the Thai Recipes PDF (or your chosen corpus)
-- [ ] `eval/run.py`: Ragas with `faithfulness`, `answer_relevancy`, `context_precision`, `context_recall`
-- [ ] Groq as the judge model (uses free quota)
-- [ ] Commit baseline numbers in `eval/baseline.json`
-- [ ] **Performance baseline:** `eval/run.py` also measures and commits per-phase latency (embed, retrieve, rerank, generate) and end-to-end p50/p95 across the 30 gold questions; store in `eval/perf_baseline.json` — CI warns if any phase regresses > 20% vs baseline
-- [ ] Document how to re-run: `python -m eval.run`
+- [x] Write `eval/gold.jsonl` — 30 (question, reference_answer, key_terms) pairs from the Attention Is All You Need paper
+- [x] `eval/run.py`: custom LLM-as-judge with `faithfulness`, `answer_relevancy`, `context_precision`, `context_recall` (Ragas dropped — broken import with langchain 0.3+)
+- [x] Groq as the judge model (uses free quota)
+- [ ] Commit baseline numbers in `eval/baseline.json` — run `python -m eval.run --save-baseline` against live API
+- [x] **Performance baseline:** p50/p95 latency recorded per run; `--save-baseline` persists to `eval/baseline.json`; regression threshold 10% quality / 20% latency
+- [x] Document how to re-run: `python -m eval.run`
 
 ## Day 9 — CI pipeline
 
