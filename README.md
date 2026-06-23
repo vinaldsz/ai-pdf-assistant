@@ -177,14 +177,14 @@ All settings live in `app/settings.py` (Pydantic `BaseSettings`). Set via `.env`
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `GROQ_API_KEY` | One of these two | — | Groq API key |
-| `OPENROUTER_API_KEY` | One of these two | — | OpenRouter API key (higher limits; recommended for eval) |
+| `GROQ_API_KEY` | Yes | — | Groq API key (used by the RAG service for answer generation) |
+| `OPENROUTER_API_KEY` | No | — | OpenRouter API key — only used by `eval/run.py` as the Ragas judge |
 | `DATABASE_URL` | Yes | — | Postgres connection URL |
 | `LANGFUSE_PUBLIC_KEY` | No | — | Enables Langfuse tracing |
 | `LANGFUSE_SECRET_KEY` | No | — | Enables Langfuse tracing |
 | `EMBEDDING_MODEL` | No | `BAAI/bge-small-en-v1.5` | Sentence-transformers model |
 | `RERANKER_MODEL` | No | `BAAI/bge-reranker-base` | Cross-encoder model |
-| `LLM_MODEL` | No | `llama-3.3-70b-versatile` | Model ID (Groq) or `meta-llama/llama-3.3-70b-instruct` (OpenRouter) |
+| `LLM_MODEL` | No | `llama-3.3-70b-versatile` | Groq model ID |
 | `MIN_SIMILARITY` | No | `0.30` | Below this score → "I don't know" |
 | `TOP_K` | No | `20` | Candidates retrieved before reranking |
 | `RERANK_K` | No | `5` | Chunks passed to the LLM |

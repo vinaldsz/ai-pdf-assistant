@@ -69,3 +69,8 @@ markers = [
     "slow: marks tests that load ML models (~90 MB download on first run); deselect with -m 'not slow'",
     "e2e: marks end-to-end tests that require a running API (set E2E_API_URL env var)",
 ]
+
+[dependency-groups]
+dev = [
+    "mypy>=2.1.0",
+]
