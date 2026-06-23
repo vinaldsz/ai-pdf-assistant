@@ -82,12 +82,12 @@ async def test_query_empty_retrieval_returns_no_answer(client: AsyncClient):
     assert "don't" in data["answer"].lower()
 
 
-async def test_query_empty_retrieval_does_not_call_groq(client: AsyncClient):
+async def test_query_empty_retrieval_does_not_call_llm(client: AsyncClient):
     with patch("app.rag.retriever.retrieve", new_callable=AsyncMock, return_value=[]), \
-         patch("app.rag.generator.AsyncGroq") as mock_groq:
+         patch("app.rag.generator.AsyncOpenAI") as mock_openai:
         await client.post("/query", json={"query": "anything"})
 
-    mock_groq.assert_not_called()
+    mock_openai.assert_not_called()
 
 
 async def test_query_calls_reranker_before_generator(client: AsyncClient):

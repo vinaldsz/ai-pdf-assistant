@@ -63,8 +63,18 @@ GOLD_FILE = EVAL_DIR / "gold.jsonl"
 BASELINE_FILE = EVAL_DIR / "baseline.json"
 
 API_URL = os.getenv("API_URL", "http://localhost:8000").rstrip("/")
+
+# Judge LLM: prefer OpenRouter (higher limits); fall back to Groq
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-JUDGE_MODEL = "llama-3.3-70b-versatile"
+if OPENROUTER_API_KEY:
+    JUDGE_API_KEY = OPENROUTER_API_KEY
+    JUDGE_BASE_URL = "https://openrouter.ai/api/v1"
+    JUDGE_MODEL = "meta-llama/llama-3.3-70b-instruct"
+else:
+    JUDGE_API_KEY = GROQ_API_KEY
+    JUDGE_BASE_URL = "https://api.groq.com/openai/v1"
+    JUDGE_MODEL = "llama-3.3-70b-versatile"
 
 REGRESSION_THRESHOLD = 0.10   # 10 pp drop triggers a warning
 LATENCY_REGRESSION = 0.20     # 20% slowdown triggers a warning
@@ -103,26 +113,27 @@ def _mean(scores: list | float) -> float:
 
 
 def run_eval(limit: int | None = None) -> dict[str, Any]:
-    if not GROQ_API_KEY:
-        print("ERROR: GROQ_API_KEY not set")
+    if not JUDGE_API_KEY:
+        print("ERROR: set OPENROUTER_API_KEY or GROQ_API_KEY")
         raise SystemExit(1)
 
     gold = [json.loads(ln) for ln in GOLD_FILE.read_text().splitlines() if ln.strip()]
     if limit:
         gold = gold[:limit]
 
+    provider = "OpenRouter" if OPENROUTER_API_KEY else "Groq"
     print(f"Running Ragas eval on {len(gold)} questions → {API_URL}")
-    print(f"Judge model: {JUDGE_MODEL}")
+    print(f"Judge: {provider} / {JUDGE_MODEL}")
     print("-" * 60)
 
-    # --- Set up Ragas LLM (Groq via OpenAI-compatible endpoint) ---
-    # Use old-style ragas.metrics API which accepts LangchainLLMWrapper.
-    # ragas.metrics.collections requires InstructorLLM — incompatible with Groq.
+    # --- Set up Ragas LLM judge ---
+    # Old-style ragas.metrics API (accepts LangchainLLMWrapper).
+    # ragas.metrics.collections requires InstructorLLM — incompatible here.
     groq_llm = LangchainLLMWrapper(
         ChatOpenAI(
             model=JUDGE_MODEL,
-            api_key=GROQ_API_KEY,  # type: ignore[arg-type]
-            base_url="https://api.groq.com/openai/v1",
+            api_key=JUDGE_API_KEY,  # type: ignore[arg-type]
+            base_url=JUDGE_BASE_URL,
             temperature=0.0,
         )
     )

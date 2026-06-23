@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, AsyncGenerator
 
-from groq import APIStatusError, AsyncGroq
+from openai import APIStatusError, AsyncOpenAI
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
 from app.obs.logging import get_logger
@@ -62,7 +62,7 @@ async def generate(query: str, chunks: list[RetrievalResult]) -> GeneratorRespon
         for c in chunks
     ]
 
-    client = AsyncGroq(api_key=settings.groq_api_key.get_secret_value())
+    client = AsyncOpenAI(api_key=settings.llm_api_key, base_url=settings.llm_base_url)
     response = await client.chat.completions.create(
         model=settings.llm_model,
         messages=_build_messages(query, context),
@@ -83,7 +83,7 @@ async def generate(query: str, chunks: list[RetrievalResult]) -> GeneratorRespon
     stop=stop_after_attempt(3),
     reraise=True,
 )
-async def _create_stream(client: AsyncGroq, messages: list[dict]):  # type: ignore[type-arg]
+async def _create_stream(client: AsyncOpenAI, messages: list[dict]):  # type: ignore[type-arg]
     """Retryable stream creation — retry here, not inside the async generator."""
     return await client.chat.completions.create(
         model=settings.llm_model,
@@ -100,7 +100,7 @@ async def generate_stream(
 ) -> AsyncGenerator[str, None]:
     """Stream token strings from Groq. Yields raw token strings one at a time."""
     context = _build_context(chunks)
-    client = AsyncGroq(api_key=settings.groq_api_key.get_secret_value())
+    client = AsyncOpenAI(api_key=settings.llm_api_key, base_url=settings.llm_base_url)
     stream = await _create_stream(client, _build_messages(query, context))
     async for chunk in stream:
         token = chunk.choices[0].delta.content or ""

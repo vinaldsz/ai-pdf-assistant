@@ -11,7 +11,7 @@ Usage:
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, PostgresDsn, SecretStr, field_validator
+from pydantic import Field, PostgresDsn, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,8 +23,27 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    # --- Required: provider credentials ---
-    groq_api_key: SecretStr = Field(..., description="Groq API key for LLM completions")
+    # --- LLM provider credentials (at least one required) ---
+    groq_api_key: SecretStr | None = Field(default=None, description="Groq API key (alternative to OpenRouter)")
+    openrouter_api_key: SecretStr | None = Field(default=None, description="OpenRouter API key (alternative to Groq)")
+
+    @model_validator(mode="after")
+    def _require_llm_key(self) -> "Settings":
+        if not self.groq_api_key and not self.openrouter_api_key:
+            raise ValueError("Either GROQ_API_KEY or OPENROUTER_API_KEY must be set")
+        return self
+
+    @property
+    def llm_base_url(self) -> str:
+        if self.openrouter_api_key:
+            return "https://openrouter.ai/api/v1"
+        return "https://api.groq.com/openai/v1"
+
+    @property
+    def llm_api_key(self) -> str:
+        if self.openrouter_api_key:
+            return self.openrouter_api_key.get_secret_value()
+        return self.groq_api_key.get_secret_value()  # type: ignore[union-attr]
 
     # --- Required: data plane ---
     database_url: PostgresDsn = Field(

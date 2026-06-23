@@ -8,7 +8,7 @@ import unicodedata
 
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
-from groq import APIStatusError
+from openai import APIStatusError
 from pydantic import BaseModel, Field, field_validator
 
 from app.obs import langfuse as lf
