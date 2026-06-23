@@ -118,12 +118,12 @@ ai-pdf-assistant/
 
 ## Day 7 — Structured logging + Langfuse
 
-- [ ] `structlog` JSON logger; request ID propagated via context var
-- [ ] Sign up for **Langfuse Cloud** (free tier, 50k observations/mo); create project, copy public + secret keys into `.env`
-- [ ] Langfuse SDK wired: one trace per request; spans for `retrieve`, `rerank`, `generate`
-- [ ] Token counts + latency captured per span
-- [ ] Self-hosting Langfuse is deferred — revisit only if Cloud free tier becomes insufficient or data-residency requires it
-- [ ] **Tests:** `tests/test_logging.py` — request ID present in all log lines for a single request; Langfuse SDK is a no-op (no exception) when `LANGFUSE_PUBLIC_KEY` is not set
+- [x] `structlog` JSON logger; request ID propagated via context var
+- [x] Sign up for **Langfuse Cloud** (free tier, 50k observations/mo); create project, copy public + secret keys into `.env`
+- [x] Langfuse SDK wired: one trace per request; spans for `retrieve`, `rerank`, `generate`
+- [x] Token counts + latency captured per span
+- [x] Self-hosting Langfuse is deferred — revisit only if Cloud free tier becomes insufficient or data-residency requires it
+- [x] **Tests:** `tests/test_logging.py` — request ID present in all log lines for a single request; Langfuse SDK is a no-op (no exception) when `LANGFUSE_PUBLIC_KEY` is not set
 
 ---
 

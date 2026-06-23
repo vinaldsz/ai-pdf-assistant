@@ -4,11 +4,13 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 
+from app.obs.logging import get_logger
 from app.settings import settings
 
 # embedder and store imported lazily inside retrieve() — keeps this module import-time cheap
 # (no sentence-transformers or asyncpg loaded until retrieve() is actually called).
 
+log = get_logger(__name__)
 _RRF_K = 60  # standard RRF constant; higher = smoother rank blending
 
 
@@ -54,7 +56,9 @@ async def retrieve(query: str, *, top_k: int | None = None) -> list[RetrievalRes
     dense = [_to_result(r) for r in dense_rows]
     sparse = [_to_result(r) for r in sparse_rows]
 
-    return _rrf(dense, sparse)[:k]
+    results = _rrf(dense, sparse)[:k]
+    log.info("retrieve.done", dense=len(dense), sparse=len(sparse), fused=len(results), best_score=round(best_score, 4))
+    return results
 
 
 def _to_result(row: dict) -> RetrievalResult:  # type: ignore[type-arg]

@@ -7,10 +7,13 @@ from typing import TYPE_CHECKING, AsyncGenerator
 from groq import APIStatusError, AsyncGroq
 from tenacity import retry, retry_if_exception, stop_after_attempt, wait_exponential
 
+from app.obs.logging import get_logger
 from app.settings import settings
 
 if TYPE_CHECKING:
     from app.rag.retriever import RetrievalResult
+
+log = get_logger(__name__)
 
 # Hard ceiling on context fed to the LLM — prevents context overflow regardless of
 # RERANK_K config or a disabled reranker letting too many chunks through.
@@ -69,6 +72,8 @@ async def generate(query: str, chunks: list[RetrievalResult]) -> GeneratorRespon
     )
 
     answer = response.choices[0].message.content or ""
+    usage = getattr(response, "usage", None)
+    log.info("generate.done", answer_len=len(answer), prompt_tokens=getattr(usage, "prompt_tokens", None), completion_tokens=getattr(usage, "completion_tokens", None))
     return GeneratorResponse(answer=answer, citations=citations)
 
 

@@ -8,14 +8,20 @@ from typing import AsyncGenerator
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from app.obs.logging import configure_logging, get_logger, request_id_var
 from app.rag import embedder, reranker
 from app.routes import health, index, query
+
+log = get_logger(__name__)
 
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    configure_logging(log_level="INFO")
+    log.info("startup: warming up models")
     await embedder.warmup()
     await reranker.warmup()
+    log.info("startup: complete")
     yield
 
 
@@ -26,6 +32,7 @@ def create_app() -> FastAPI:
     async def _attach_request_id(request: Request, call_next):  # type: ignore[no-untyped-def]
         request_id = str(uuid.uuid4())
         request.state.request_id = request_id
+        request_id_var.set(request_id)
         response = await call_next(request)
         response.headers["X-Request-ID"] = request_id
         return response

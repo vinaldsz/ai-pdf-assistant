@@ -8,9 +8,11 @@ from __future__ import annotations
 import asyncio
 from functools import lru_cache
 
+from app.obs.logging import get_logger
 from app.rag.retriever import RetrievalResult  # lightweight — no torch dep
 from app.settings import settings
 
+log = get_logger(__name__)
 _warmed: bool = False  # set True after warmup(); checked by /ready
 
 
@@ -42,7 +44,9 @@ async def rerank(
     """Async wrapper — offloads CPU-bound scoring to a thread pool executor."""
     top = k if k is not None else settings.rerank_k
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(None, _rerank_sync, query, chunks, top)
+    results = await loop.run_in_executor(None, _rerank_sync, query, chunks, top)
+    log.info("rerank.done", candidates=len(chunks), kept=len(results))
+    return results
 
 
 async def warmup() -> None:
