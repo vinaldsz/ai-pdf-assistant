@@ -138,6 +138,29 @@ ai-pdf-assistant/
 - [x] **Performance baseline:** p50/p95 latency recorded per run; `--save-baseline` persists to `eval/baseline.json`; regression threshold 10% quality / 20% latency
 - [x] Document how to re-run: `python -m eval.run`
 
+## Day 8.5 — Retrieval quality investigation (context recall)
+
+Smoke test (2 questions) showed `context_recall = 0.500` — roughly half the information needed to answer wasn't present in the retrieved chunks. Full baseline needed before drawing conclusions, but pre-plan the investigation.
+
+**What context recall measures:** the Ragas judge checks whether key statements in the reference answer are covered by the retrieved chunks. Low recall = retrieval is missing relevant content, not that the LLM is wrong.
+
+**Step 1 — Get the full baseline**
+- [ ] Run `python -m eval.run --save-baseline` when Groq quota resets
+- [ ] Identify which specific questions have recall < 0.4 from `eval/results.json`
+
+**Step 2 — Diagnose root cause per low-recall question**
+- [ ] For each failing question, manually check: does the correct chunk exist in the DB? (`SELECT text FROM chunks WHERE text ILIKE '%<key_term>%'`)
+- [ ] If chunk exists but wasn't retrieved → retrieval ranking problem (threshold or TOP_K)
+- [ ] If chunk doesn't exist → chunking boundary split the answer across two chunks
+
+**Step 3 — Tune retrieval parameters (try in order)**
+- [ ] Lower `MIN_SIMILARITY` from `0.30` → `0.20` — may be filtering out relevant chunks for factual queries
+- [ ] Raise `TOP_K` from `20` → `30` — more candidates before reranking
+- [ ] Check RRF sparse weight — exact-term queries (e.g. "28.4 BLEU", "4000 warmup steps") should score high on `tsvector`; verify sparse results are being returned at all
+
+**Step 4 — Re-run eval after each change and compare to baseline**
+- [ ] Accept the change if recall improves without degrading faithfulness or answer_relevancy by > 10pp
+
 ## Day 9 — CI pipeline
 
 - [ ] Integration tests using `testcontainers` (real pgvector in CI) — covers `store.py` insert + query round-trip, sha256 dedup, transactional rollback on chunk failure
