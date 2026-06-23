@@ -110,7 +110,8 @@ def _assert_ip_is_public(addr: IPv4Address | IPv6Address) -> None:
 async def _download(url: str) -> bytes:
     await _validate_url(url)
 
-    async with httpx.AsyncClient(follow_redirects=False, timeout=30.0) as client:
+    headers = {"User-Agent": "Mozilla/5.0 (compatible; AI-PDF-Assistant/1.0)"}
+    async with httpx.AsyncClient(follow_redirects=False, timeout=60.0, headers=headers) as client:
         current_url = url
         for hop in range(_MAX_REDIRECTS + 1):
             async with client.stream("GET", current_url) as response:
@@ -152,7 +153,12 @@ async def _download(url: str) -> bytes:
 
 
 def _parse_pdf(pdf_bytes: bytes) -> list[tuple[int, str]]:
-    reader = PdfReader(io.BytesIO(pdf_bytes))
+    if not pdf_bytes[:4] == b"%PDF":
+        raise ValueError(f"Response is not a PDF (starts with {pdf_bytes[:20]!r})")
+    try:
+        reader = PdfReader(io.BytesIO(pdf_bytes))
+    except Exception as exc:
+        raise ValueError(f"PDF could not be parsed: {exc}") from exc
     return [
         (i + 1, text)
         for i, page in enumerate(reader.pages)

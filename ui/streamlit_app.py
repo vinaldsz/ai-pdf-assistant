@@ -67,11 +67,23 @@ with st.sidebar:
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
+def _render_citations(citations: list[dict]) -> None:  # type: ignore[type-arg]
+    if not citations:
+        return
+    st.divider()
+    st.caption("**Sources**")
+    for i, c in enumerate(citations, 1):
+        st.caption(
+            f"[{i}] page {c['page']} · score {c['score']:.3f} · doc `{c['doc_id'][:8]}…`"
+            f"\n> {c['snippet']}"
+        )
+
+
 for msg in st.session_state.messages:
     with st.chat_message(msg["role"]):
         st.markdown(msg["content"])
         if msg.get("citations"):
-            _render_citations(msg["citations"])  # type: ignore[name-defined]
+            _render_citations(msg["citations"])
 
 if query := st.chat_input("Ask a question about your PDFs…"):
     st.session_state.messages.append({"role": "user", "content": query})
@@ -84,7 +96,7 @@ if query := st.chat_input("Ask a question about your PDFs…"):
         full_text = ""
 
         try:
-            with httpx.Client(timeout=60) as client:
+            with httpx.Client(timeout=120) as client:
                 with client.stream(
                     "POST",
                     f"{API_URL}/query/stream",
@@ -116,21 +128,9 @@ if query := st.chat_input("Ask a question about your PDFs…"):
             for i, c in enumerate(citations, 1):
                 st.caption(
                     f"[{i}] page {c['page']} · score {c['score']:.3f} · doc `{c['doc_id'][:8]}…`"
-                    f"\n> {c['snippet'][:120]}…"
+                    f"\n> {c['snippet']}"
                 )
 
         st.session_state.messages.append(
             {"role": "assistant", "content": full_text, "citations": citations}
-        )
-
-
-def _render_citations(citations: list[dict]) -> None:  # type: ignore[type-arg]
-    if not citations:
-        return
-    st.divider()
-    st.caption("**Sources**")
-    for i, c in enumerate(citations, 1):
-        st.caption(
-            f"[{i}] page {c['page']} · score {c['score']:.3f} · doc `{c['doc_id'][:8]}…`"
-            f"\n> {c['snippet'][:120]}…"
         )

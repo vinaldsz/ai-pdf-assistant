@@ -67,7 +67,7 @@ async def query_stream_endpoint(body: QueryRequest) -> StreamingResponse:
         {
             "doc_id": c.doc_id,
             "page": c.page,
-            "snippet": c.text[:200],
+            "snippet": c.text[:400],
             "score": round(c.score, 4),
         }
         for c in reranked
