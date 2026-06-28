@@ -272,12 +272,17 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--save-baseline", action="store_true")
     parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--label", type=str, default=None, help="Optional label suffix for the results file")
     args = parser.parse_args()
 
     summary = run_eval(limit=args.limit)
     print_summary(summary)
 
-    results_file = EVAL_DIR / "results.json"
+    import datetime
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    label = f"_{args.label}" if args.label else ""
+    results_file = EVAL_DIR / "runs" / f"{ts}{label}.json"
+    results_file.parent.mkdir(exist_ok=True)
     results_file.write_text(json.dumps(summary, indent=2))
     print(f"\nFull results → {results_file}")
 
