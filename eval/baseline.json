@@ -1,0 +1,11 @@
+{
+  "n_questions": 30,
+  "n_answered": 30,
+  "no_answer_rate": 0.0,
+  "faithfulness": 0.3624,
+  "answer_relevancy": 0.7488,
+  "context_precision": 0.2823,
+  "context_recall": 0.3929,
+  "latency_p50_s": 3.962,
+  "latency_p95_s": 8.02
+}
