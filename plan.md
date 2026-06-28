@@ -140,26 +140,34 @@ ai-pdf-assistant/
 
 ## Day 8.5 — Retrieval quality investigation (context recall)
 
-Smoke test (2 questions) showed `context_recall = 0.500` — roughly half the information needed to answer wasn't present in the retrieved chunks. Full baseline needed before drawing conclusions, but pre-plan the investigation.
+Full baseline: faithfulness=0.362, answer_relevancy=0.749, context_precision=0.282, context_recall=0.393, latency p50=3.96s, p95=8.02s. Committed in `eval/baseline.json`.
 
-**What context recall measures:** the Ragas judge checks whether key statements in the reference answer are covered by the retrieved chunks. Low recall = retrieval is missing relevant content, not that the LLM is wrong.
+**Root cause analysis — three sources of low recall:**
+1. References/bibliography section (pages 11–15) polluting retrieval with citation text
+2. Table data garbled by pypdf (tables extracted as character-by-character noise)
+3. Vocabulary mismatch on specific factual queries (exact numbers not in top-5 chunks)
 
-**Step 1 — Get the full baseline**
-- [ ] Run `python -m eval.run --save-baseline` when Groq quota resets
-- [ ] Identify which specific questions have recall < 0.4 from `eval/results.json`
+**Experiments run (2026-06-28, Groq quota exhausted after first run):**
 
-**Step 2 — Diagnose root cause per low-recall question**
-- [ ] For each failing question, manually check: does the correct chunk exist in the DB? (`SELECT text FROM chunks WHERE text ILIKE '%<key_term>%'`)
-- [ ] If chunk exists but wasn't retrieved → retrieval ranking problem (threshold or TOP_K)
-- [ ] If chunk doesn't exist → chunking boundary split the answer across two chunks
+| Experiment | faithfulness | answer_relevancy | context_precision | context_recall | n_answered |
+|-----------|-------------|-----------------|------------------|----------------|-----------|
+| Baseline (chunk=800, refs included) | 0.362 | 0.749 | 0.282 | 0.393 | 30 |
+| skip_refs + chunk=1200 | 0.291 | 0.808 | 0.202 | 0.242 | 20 (10 got 429) |
+| skip_refs + chunk=800 | n/a | n/a | n/a | n/a | 1 (quota gone) |
 
-**Step 3 — Tune retrieval parameters (try in order)**
-- [ ] Lower `MIN_SIMILARITY` from `0.30` → `0.20` — may be filtering out relevant chunks for factual queries
-- [ ] Raise `TOP_K` from `20` → `30` — more candidates before reranking
-- [ ] Check RRF sparse weight — exact-term queries (e.g. "28.4 BLEU", "4000 warmup steps") should score high on `tsvector`; verify sparse results are being returned at all
+**Findings from experiments:**
+- chunk_size=1200 → WORSE: produces fewer total chunks (31 vs 48 with 800) → less coverage → lower recall
+- References fix is structurally correct (max page now 10, no bibliography chunks in DB)
+- Tuning (MIN_SIMILARITY 0.20, TOP_K 30) also backfired: flooded reranker with noise, pushed relevant chunks past RERANK_K=5 cutoff
+- Groq free tier is ~100k tokens/day (not 1M); a full 30-question run + Ragas judge consumes the full daily budget
 
-**Step 4 — Re-run eval after each change and compare to baseline**
-- [ ] Accept the change if recall improves without degrading faithfulness or answer_relevancy by > 10pp
+**Current state:**
+- `app/ingest/pdf.py`: references section regex skip is in place (keep)
+- `app/settings.py`: chunk_size=800, chunk_overlap=80, top_k=20, min_similarity=0.30 (all back to baseline)
+
+**Next step (when eval budget is available):**
+- [ ] Re-run eval with just the references fix (chunk=800) to measure its isolated impact
+- [ ] If recall still low, investigate sparse (tsvector) retrieval — exact-term queries should score high on BM25 but may not be if the sparse index isn't contributing
 
 ## Day 9 — CI pipeline
 

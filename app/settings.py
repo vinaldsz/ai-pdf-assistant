@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     reranker_model: str = Field(default="BAAI/bge-reranker-base")
 
     chunk_size: int = Field(default=800, gt=0)
-    chunk_overlap: int = Field(default=120, ge=0)
+    chunk_overlap: int = Field(default=80, ge=0)
     top_k: int = Field(default=20, gt=0)
     rerank_k: int = Field(default=5, gt=0)
     min_similarity: float = Field(default=0.30, ge=0.0, le=1.0)

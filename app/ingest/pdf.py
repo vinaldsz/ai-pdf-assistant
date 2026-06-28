@@ -9,6 +9,8 @@ from dataclasses import dataclass
 from ipaddress import IPv4Address, IPv6Address, ip_address, ip_network
 from urllib.parse import urljoin, urlparse
 
+import re
+
 import httpx
 from pypdf import PdfReader
 
@@ -172,11 +174,23 @@ def _parse_pdf(pdf_bytes: bytes) -> list[tuple[int, str]]:
             f"PDF has {len(reader.pages)} pages (limit {MAX_PDF_PAGES}). "
             "Split the document and re-submit each part."
         )
-    return [
-        (i + 1, text)
-        for i, page in enumerate(reader.pages)
-        if (text := (page.extract_text() or "").strip())
-    ]
+    _REFS_PATTERN = re.compile(r"(?m)^(References|Bibliography|Works Cited)\s*$")
+    pages = []
+    for i, page in enumerate(reader.pages):
+        text = (page.extract_text() or "").strip()
+        if not text:
+            continue
+        # Stop at the references/bibliography section — it pollutes retrieval
+        # by matching citation text instead of methodology content.
+        # Truncate the page at the heading if it appears mid-page.
+        match = _REFS_PATTERN.search(text)
+        if match:
+            pre = text[: match.start()].strip()
+            if pre:
+                pages.append((i + 1, pre))
+            break
+        pages.append((i + 1, text))
+    return pages
 
 
 def _chunk_pages(pages: list[tuple[int, str]]) -> list[Chunk]:
