@@ -67,7 +67,16 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --frozen
-      - run: uv run pip-audit --skip-editable
+      - run: |
+          # CVE-2025-69872: diskcache — no fix released (transitive via langfuse)
+          # CVE-2026-6587:  ragas    — no fix released
+          # PYSEC-2025-217: transformers — no fix released (transitive via sentence-transformers)
+          # CVE-2026-1839:  transformers — fix is 5.0.0rc3 (RC); wait for stable release
+          uv run pip-audit --skip-editable \
+            --ignore-vuln CVE-2025-69872 \
+            --ignore-vuln CVE-2026-6587 \
+            --ignore-vuln PYSEC-2025-217 \
+            --ignore-vuln CVE-2026-1839
       - run: uv run bandit -r app/ -ll -q
 
   docker:
