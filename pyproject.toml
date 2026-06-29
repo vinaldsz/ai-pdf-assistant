@@ -68,9 +68,13 @@ testpaths = ["tests"]
 markers = [
     "slow: marks tests that load ML models (~90 MB download on first run); deselect with -m 'not slow'",
     "e2e: marks end-to-end tests that require a running API (set E2E_API_URL env var)",
+    "integration: marks tests that require Docker (real pgvector DB via testcontainers)",
 ]
 
 [dependency-groups]
 dev = [
+    "bandit>=1.9.4",
     "mypy>=2.1.0",
+    "pip-audit>=2.10.1",
+    "testcontainers>=4.14.2",
 ]
