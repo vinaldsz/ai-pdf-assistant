@@ -3,6 +3,7 @@
 These tests are network-free: bare IP tests bypass DNS. The dedup test mocks
 the store so no DB connection is needed.
 """
+
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -12,6 +13,7 @@ from app.ingest.pdf import _validate_url, ingest_bytes
 # ---------------------------------------------------------------------------
 # _validate_url — scheme enforcement
 # ---------------------------------------------------------------------------
+
 
 async def test_rejects_http_scheme():
     with pytest.raises(ValueError, match="Only https://"):
@@ -31,6 +33,7 @@ async def test_rejects_no_hostname():
 # ---------------------------------------------------------------------------
 # _validate_url — RFC1918 + special-purpose blocks (bare IPs, no DNS needed)
 # ---------------------------------------------------------------------------
+
 
 async def test_rejects_rfc1918_10_block():
     with pytest.raises(ValueError, match="blocked"):
@@ -72,6 +75,7 @@ async def test_accepts_public_ip():
 # ingest_bytes — sha256 dedup
 # ---------------------------------------------------------------------------
 
+
 async def test_sha256_dedup_returns_skipped_on_second_call():
     fake_pdf = b"fake pdf bytes for sha256 dedup test"
     existing_doc = {"id": "123e4567-e89b-12d3-a456-426614174000"}
@@ -92,14 +96,17 @@ async def test_sha256_dedup_does_not_call_insert_when_duplicate():
     fake_pdf = b"another fake payload"
     existing_doc = {"id": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"}
 
-    with patch(
-        "app.rag.store.get_document_by_sha256",
-        new_callable=AsyncMock,
-        return_value=existing_doc,
-    ) as mock_get, patch(
-        "app.rag.store.insert_document_with_chunks",
-        new_callable=AsyncMock,
-    ) as mock_insert:
+    with (
+        patch(
+            "app.rag.store.get_document_by_sha256",
+            new_callable=AsyncMock,
+            return_value=existing_doc,
+        ) as mock_get,
+        patch(
+            "app.rag.store.insert_document_with_chunks",
+            new_callable=AsyncMock,
+        ) as mock_insert,
+    ):
         await ingest_bytes(fake_pdf, source_url="https://example.com/dup.pdf")
 
     mock_get.assert_called_once()

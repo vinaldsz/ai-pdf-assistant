@@ -1,4 +1,5 @@
 """Tests for structured logging and Langfuse no-op behaviour."""
+
 from __future__ import annotations
 
 import json

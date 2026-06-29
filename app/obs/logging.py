@@ -6,6 +6,7 @@ Usage:
     log = get_logger(__name__)
     log.info("retrieved chunks", count=5, query="what is attention?")
 """
+
 from __future__ import annotations
 
 import contextvars
@@ -16,13 +17,13 @@ from typing import Any
 import structlog
 
 # Context variable — set once per request in middleware, read by any log call
-request_id_var: contextvars.ContextVar[str] = contextvars.ContextVar(
-    "request_id", default="-"
-)
+request_id_var: contextvars.ContextVar[str] = contextvars.ContextVar("request_id", default="-")
 
 
 def _add_request_id(
-    logger: object, method: str, event_dict: dict  # type: ignore[type-arg]
+    logger: object,
+    method: str,
+    event_dict: dict,  # type: ignore[type-arg]
 ) -> dict:  # type: ignore[type-arg]
     event_dict["request_id"] = request_id_var.get()
     return event_dict

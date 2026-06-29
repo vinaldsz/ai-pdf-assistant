@@ -1,6 +1,7 @@
 """POST /query — hybrid RAG pipeline: retrieve → rerank → generate → citations.
 POST /query/stream — same pipeline but streams tokens via Server-Sent Events.
 """
+
 from __future__ import annotations
 
 import json
@@ -20,9 +21,7 @@ from app.rag import generator, reranker, retriever
 router = APIRouter()
 log = get_logger(__name__)
 
-_NO_ANSWER = (
-    "I don't have enough information in the indexed documents to answer that question."
-)
+_NO_ANSWER = "I don't have enough information in the indexed documents to answer that question."
 
 
 class QueryRequest(BaseModel):
@@ -33,9 +32,7 @@ class QueryRequest(BaseModel):
     def _strip_control_chars(cls, v: str) -> str:
         # Remove C0/C1 control characters (null bytes, escape sequences, etc.)
         # but keep normal whitespace (\n, \t, space).
-        return "".join(
-            ch for ch in v if unicodedata.category(ch) != "Cc" or ch in "\n\t"
-        )
+        return "".join(ch for ch in v if unicodedata.category(ch) != "Cc" or ch in "\n\t")
 
 
 class Citation(BaseModel):
@@ -72,12 +69,20 @@ async def query_endpoint(request: Request, body: QueryRequest) -> QueryResponse:
     try:
         with lf.span("generate", input={"chunks": len(reranked)}) as s:
             result = await generator.generate(body.query, reranked)
-            s.set_output({"answer_len": len(result.answer), "prompt_tokens": result.prompt_tokens, "completion_tokens": result.completion_tokens})
+            s.set_output(
+                {
+                    "answer_len": len(result.answer),
+                    "prompt_tokens": result.prompt_tokens,
+                    "completion_tokens": result.completion_tokens,
+                }
+            )
     except APIStatusError as exc:
         log.warning("generate.upstream_error", status_code=exc.status_code)
         lf.end_trace(output={"error": exc.status_code})
         status = 429 if exc.status_code == 429 else 503
-        raise HTTPException(status_code=status, detail="LLM service temporarily unavailable") from exc
+        raise HTTPException(
+            status_code=status, detail="LLM service temporarily unavailable"
+        ) from exc
 
     log.info("query.done", citations=len(result.citations))
     lf.end_trace(output={"answer": result.answer[:200]})

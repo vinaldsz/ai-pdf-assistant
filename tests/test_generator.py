@@ -1,9 +1,11 @@
 """Unit tests for app/rag/generator.py — prompt ceiling, pure logic, no Groq calls."""
+
 from app.rag.generator import _MAX_CONTEXT_CHARS, _build_context
 
 
 def _r(text: str, page: int = 1, score: float = 0.9):  # type: ignore[return]
     from app.rag.retriever import RetrievalResult
+
     return RetrievalResult(chunk_id="cid", doc_id="did", page=page, text=text, score=score)
 
 

@@ -1,4 +1,5 @@
 """PDF ingestion pipeline: download → sha256 dedup → parse → chunk → embed → store."""
+
 from __future__ import annotations
 
 import asyncio
@@ -18,17 +19,17 @@ from app.settings import settings
 
 CHUNKER_VERSION = "recursive-v1"
 MAX_PDF_BYTES = 50 * 1024 * 1024  # 50 MB — keeps peak RAM safe on 512 MB Fly VM
-MAX_PDF_PAGES = 500               # ~30k chunks at this limit; beyond that risks OOM on 512 MB VM
+MAX_PDF_PAGES = 500  # ~30k chunks at this limit; beyond that risks OOM on 512 MB VM
 _MAX_REDIRECTS = 5
 _BLOCKED_NETWORKS = [
-    ip_network("10.0.0.0/8"),       # RFC1918 private
-    ip_network("172.16.0.0/12"),    # RFC1918 private
-    ip_network("192.168.0.0/16"),   # RFC1918 private
-    ip_network("169.254.0.0/16"),   # link-local / cloud metadata (AWS, GCP, Azure, Fly)
-    ip_network("127.0.0.0/8"),      # loopback
-    ip_network("0.0.0.0/8"),        # "this" network
-    ip_network("::1/128"),          # IPv6 loopback
-    ip_network("fc00::/7"),         # IPv6 unique-local (covers Fly.io fd00::/8)
+    ip_network("10.0.0.0/8"),  # RFC1918 private
+    ip_network("172.16.0.0/12"),  # RFC1918 private
+    ip_network("192.168.0.0/16"),  # RFC1918 private
+    ip_network("169.254.0.0/16"),  # link-local / cloud metadata (AWS, GCP, Azure, Fly)
+    ip_network("127.0.0.0/8"),  # loopback
+    ip_network("0.0.0.0/8"),  # "this" network
+    ip_network("::1/128"),  # IPv6 loopback
+    ip_network("fc00::/7"),  # IPv6 unique-local (covers Fly.io fd00::/8)
 ]
 
 
@@ -48,11 +49,13 @@ async def ingest_bytes(pdf_bytes: bytes, *, source_url: str) -> IngestResult:
     sha256 = hashlib.sha256(pdf_bytes).hexdigest()
 
     from app.rag import store  # implemented Day 3
+
     existing = await store.get_document_by_sha256(sha256)
     if existing is not None:
         return IngestResult(doc_id=str(existing["id"]), skipped=True, chunk_count=0)
 
     from app.rag import embedder  # implemented Day 3
+
     loop = asyncio.get_running_loop()
     # _parse_pdf is CPU-bound (pypdf can be slow on large/complex PDFs); run in a thread
     # so it cannot block the event loop and stall concurrent requests.

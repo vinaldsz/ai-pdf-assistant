@@ -1,4 +1,5 @@
 """In-memory job store for background ingestion tasks."""
+
 from __future__ import annotations
 
 import uuid

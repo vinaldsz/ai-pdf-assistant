@@ -7,6 +7,7 @@ start_as_current_observation() context managers and update_current_span().
 One trace per /query request. Spans for retrieve, rerank, generate.
 Import only start_trace / end_trace / span from pipeline modules.
 """
+
 from __future__ import annotations
 
 import contextvars
@@ -34,6 +35,7 @@ def _client() -> Any:
         return None
     if _client_instance is None:
         from langfuse import Langfuse
+
         _client_instance = Langfuse(
             public_key=settings.langfuse_public_key.get_secret_value(),  # type: ignore[union-attr]
             secret_key=settings.langfuse_secret_key.get_secret_value(),  # type: ignore[union-attr]
@@ -88,9 +90,7 @@ class span:
         client = _client()
         # Only create a child span when there is an active root trace
         if client is not None and _trace_cm_var.get() is not None:
-            self._cm = client.start_as_current_observation(
-                name=self.name, input=self.input
-            )
+            self._cm = client.start_as_current_observation(name=self.name, input=self.input)
             self._cm.__enter__()
         return self
 

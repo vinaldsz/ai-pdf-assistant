@@ -1,4 +1,5 @@
 """GET /health and GET /ready endpoints."""
+
 from __future__ import annotations
 
 from fastapi import APIRouter, Response

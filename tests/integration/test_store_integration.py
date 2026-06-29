@@ -6,6 +6,7 @@ the store layer end-to-end: insert, dedup, retrieval, and transactional rollback
 
 Requires Docker to be running. Skip with: pytest -m "not integration"
 """
+
 from __future__ import annotations
 
 import asyncio

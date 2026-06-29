@@ -68,7 +68,7 @@ def _merge(pieces: list[str], size: int, overlap: int) -> list[str]:
             chunk = " ".join(buf)
             chunks.append(chunk)
             tail = chunk[-overlap:].strip() if overlap else ""
-            buf = ([tail, piece] if tail else [piece])
+            buf = [tail, piece] if tail else [piece]
             buf_len = (len(tail) + 1 + plen) if tail else plen
         else:
             buf.append(piece)

@@ -1,4 +1,5 @@
 """pgvector read/write helpers backed by an asyncpg connection pool."""
+
 from __future__ import annotations
 
 import asyncio
@@ -35,15 +36,15 @@ async def _create_pool() -> asyncpg.Pool:
 def _dsn() -> str:
     url = str(settings.database_url)
     # asyncpg uses postgresql:// — strip SQLAlchemy driver prefix if present
-    return (
-        url.replace("postgresql+asyncpg://", "postgresql://")
-        .replace("postgresql+psycopg2://", "postgresql://")
+    return url.replace("postgresql+asyncpg://", "postgresql://").replace(
+        "postgresql+psycopg2://", "postgresql://"
     )
 
 
 # ---------------------------------------------------------------------------
 # Read helpers
 # ---------------------------------------------------------------------------
+
 
 async def get_document_by_sha256(sha256: str) -> dict[str, Any] | None:
     pool = await get_pool()
@@ -69,6 +70,7 @@ async def get_chunks_by_doc(doc_id: str) -> list[dict[str, Any]]:
 # Write helpers
 # ---------------------------------------------------------------------------
 
+
 async def insert_document_with_chunks(
     *,
     sha256: str,
@@ -91,7 +93,12 @@ async def insert_document_with_chunks(
                 VALUES ($1, $2, $3, $4, $5, $6)
                 RETURNING id
                 """,
-                sha256, source_url, title, pages, embedder_version, chunker_version,
+                sha256,
+                source_url,
+                title,
+                pages,
+                embedder_version,
+                chunker_version,
             )
             doc_id = str(row["id"])
 
@@ -118,6 +125,7 @@ async def insert_document_with_chunks(
 # ---------------------------------------------------------------------------
 # Retrieval helpers (used by retriever.py)
 # ---------------------------------------------------------------------------
+
 
 async def dense_search(
     query_vector: list[float],

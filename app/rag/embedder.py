@@ -1,4 +1,5 @@
 """Lazy-loaded local embedder using BAAI/bge-small-en-v1.5 via sentence-transformers."""
+
 from __future__ import annotations
 
 import asyncio
@@ -16,6 +17,7 @@ _warmed: bool = False  # set True after warmup(); checked by /ready
 @lru_cache(maxsize=1)
 def _model() -> SentenceTransformer:
     from sentence_transformers import SentenceTransformer  # lazy — avoids torch at import time
+
     return SentenceTransformer(settings.embedding_model, device="cpu")
 
 

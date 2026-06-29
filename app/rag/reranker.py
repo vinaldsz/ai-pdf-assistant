@@ -3,6 +3,7 @@
 Runs in a thread (CPU-bound). Same lazy-load pattern as embedder.py so that
 importing this module never triggers a torch load.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -20,6 +21,7 @@ _warmed: bool = False  # set True after warmup(); checked by /ready
 @lru_cache(maxsize=1)
 def _model() -> Any:
     from sentence_transformers import CrossEncoder  # lazy — avoids torch at import time
+
     return CrossEncoder(settings.reranker_model, device="cpu")
 
 

@@ -1,4 +1,5 @@
 """Hybrid retriever: dense cosine (pgvector) + sparse tsvector, fused with RRF."""
+
 from __future__ import annotations
 
 import asyncio
@@ -35,9 +36,9 @@ async def retrieve(query: str, *, top_k: int | None = None) -> list[RetrievalRes
 
     # Embed query in a thread — encode_batch is CPU-bound and would block the event loop
     loop = asyncio.get_running_loop()
-    query_vector: list[float] = (
-        await loop.run_in_executor(None, embedder.encode_batch, [query])
-    )[0]
+    query_vector: list[float] = (await loop.run_in_executor(None, embedder.encode_batch, [query]))[
+        0
+    ]
 
     # Run dense and sparse searches concurrently
     dense_rows, sparse_rows = await asyncio.gather(
@@ -57,7 +58,13 @@ async def retrieve(query: str, *, top_k: int | None = None) -> list[RetrievalRes
     sparse = [_to_result(r) for r in sparse_rows]
 
     results = _rrf(dense, sparse)[:k]
-    log.info("retrieve.done", dense=len(dense), sparse=len(sparse), fused=len(results), best_score=round(best_score, 4))
+    log.info(
+        "retrieve.done",
+        dense=len(dense),
+        sparse=len(sparse),
+        fused=len(results),
+        best_score=round(best_score, 4),
+    )
     return results
 
 
@@ -80,11 +87,15 @@ def _rrf(
     by_id: dict[str, RetrievalResult] = {}
 
     for rank, result in enumerate(dense):
-        rrf_scores[result.chunk_id] = rrf_scores.get(result.chunk_id, 0.0) + 1.0 / (_RRF_K + rank + 1)
+        rrf_scores[result.chunk_id] = rrf_scores.get(result.chunk_id, 0.0) + 1.0 / (
+            _RRF_K + rank + 1
+        )
         by_id[result.chunk_id] = result
 
     for rank, result in enumerate(sparse):
-        rrf_scores[result.chunk_id] = rrf_scores.get(result.chunk_id, 0.0) + 1.0 / (_RRF_K + rank + 1)
+        rrf_scores[result.chunk_id] = rrf_scores.get(result.chunk_id, 0.0) + 1.0 / (
+            _RRF_K + rank + 1
+        )
         by_id[result.chunk_id] = result
 
     return sorted(by_id.values(), key=lambda r: rrf_scores[r.chunk_id], reverse=True)

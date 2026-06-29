@@ -1,4 +1,5 @@
 """FastAPI application factory — middleware, lifespan, and router wiring."""
+
 from __future__ import annotations
 
 import uuid
@@ -32,7 +33,9 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 def create_app() -> FastAPI:
     docs_url = None if settings.environment == "prod" else "/docs"
     redoc_url = None if settings.environment == "prod" else "/redoc"
-    app = FastAPI(title="AI PDF Assistant", lifespan=_lifespan, docs_url=docs_url, redoc_url=redoc_url)
+    app = FastAPI(
+        title="AI PDF Assistant", lifespan=_lifespan, docs_url=docs_url, redoc_url=redoc_url
+    )
 
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]

@@ -1,6 +1,7 @@
 """POST /index — accept a PDF URL, enqueue background ingestion, return job ID.
 GET  /jobs/{job_id} — check ingestion status.
 """
+
 from __future__ import annotations
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
@@ -33,7 +34,9 @@ class JobResponse(BaseModel):
 
 @router.post("/index", response_model=IndexResponse, status_code=202)
 @limiter.limit("5/minute")
-async def index_endpoint(request: Request, body: IndexRequest, background_tasks: BackgroundTasks) -> IndexResponse:
+async def index_endpoint(
+    request: Request, body: IndexRequest, background_tasks: BackgroundTasks
+) -> IndexResponse:
     job = jobs.create_job(source_url=body.url)
     background_tasks.add_task(_run_ingestion, job.id, body.url)
     return IndexResponse(job_id=job.id, status=job.status)

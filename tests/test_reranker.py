@@ -1,4 +1,5 @@
 """Tests for app/rag/reranker.py."""
+
 from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
@@ -80,7 +81,9 @@ def test_reranker_ranks_more_relevant_chunk_higher():
     relevant = _chunk("rel", text="The Transformer model uses multi-head self-attention.")
     irrelevant = _chunk("irr", text="The recipe calls for two cups of flour and one egg.")
 
-    result = real_rerank("How does the Transformer attention mechanism work?", [irrelevant, relevant], k=2)
+    result = real_rerank(
+        "How does the Transformer attention mechanism work?", [irrelevant, relevant], k=2
+    )
 
     assert result[0].chunk_id == "rel", "More relevant chunk should rank first"
 

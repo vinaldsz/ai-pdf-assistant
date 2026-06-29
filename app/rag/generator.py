@@ -1,4 +1,5 @@
 """Prompt builder and Groq LLM completion with tenacity retries."""
+
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator
@@ -66,7 +67,9 @@ async def generate(query: str, chunks: list[RetrievalResult]) -> GeneratorRespon
         for c in chunks
     ]
 
-    client = AsyncOpenAI(api_key=settings.groq_api_key.get_secret_value(), base_url="https://api.groq.com/openai/v1")
+    client = AsyncOpenAI(
+        api_key=settings.groq_api_key.get_secret_value(), base_url="https://api.groq.com/openai/v1"
+    )
     response = await client.chat.completions.create(
         model=settings.llm_model,
         messages=_build_messages(query, context),
@@ -79,8 +82,18 @@ async def generate(query: str, chunks: list[RetrievalResult]) -> GeneratorRespon
     usage = getattr(response, "usage", None)
     prompt_tokens = getattr(usage, "prompt_tokens", None)
     completion_tokens = getattr(usage, "completion_tokens", None)
-    log.info("generate.done", answer_len=len(answer), prompt_tokens=prompt_tokens, completion_tokens=completion_tokens)
-    return GeneratorResponse(answer=answer, citations=citations, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens)
+    log.info(
+        "generate.done",
+        answer_len=len(answer),
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+    )
+    return GeneratorResponse(
+        answer=answer,
+        citations=citations,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+    )
 
 
 @retry(
@@ -89,7 +102,9 @@ async def generate(query: str, chunks: list[RetrievalResult]) -> GeneratorRespon
     stop=stop_after_attempt(3),
     reraise=True,
 )
-async def _create_stream(client: AsyncOpenAI, messages: list[ChatCompletionMessageParam]) -> AsyncStream[ChatCompletionChunk]:
+async def _create_stream(
+    client: AsyncOpenAI, messages: list[ChatCompletionMessageParam]
+) -> AsyncStream[ChatCompletionChunk]:
     """Retryable stream creation — retry here, not inside the async generator."""
     return await client.chat.completions.create(
         model=settings.llm_model,
@@ -101,12 +116,12 @@ async def _create_stream(client: AsyncOpenAI, messages: list[ChatCompletionMessa
     )
 
 
-async def generate_stream(
-    query: str, chunks: list[RetrievalResult]
-) -> AsyncGenerator[str, None]:
+async def generate_stream(query: str, chunks: list[RetrievalResult]) -> AsyncGenerator[str, None]:
     """Stream token strings from Groq. Yields raw token strings one at a time."""
     context = _build_context(chunks)
-    client = AsyncOpenAI(api_key=settings.groq_api_key.get_secret_value(), base_url="https://api.groq.com/openai/v1")
+    client = AsyncOpenAI(
+        api_key=settings.groq_api_key.get_secret_value(), base_url="https://api.groq.com/openai/v1"
+    )
     stream = await _create_stream(client, _build_messages(query, context))
     async for chunk in stream:
         token = chunk.choices[0].delta.content or ""
