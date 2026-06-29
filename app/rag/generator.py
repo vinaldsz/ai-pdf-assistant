@@ -31,6 +31,8 @@ _SYSTEM_PROMPT = (
 class GeneratorResponse:
     answer: str
     citations: list[dict]  # type: ignore[type-arg]
+    prompt_tokens: int | None = None
+    completion_tokens: int | None = None
 
 
 def _is_retryable(exc: BaseException) -> bool:
@@ -74,8 +76,10 @@ async def generate(query: str, chunks: list[RetrievalResult]) -> GeneratorRespon
 
     answer = response.choices[0].message.content or ""
     usage = getattr(response, "usage", None)
-    log.info("generate.done", answer_len=len(answer), prompt_tokens=getattr(usage, "prompt_tokens", None), completion_tokens=getattr(usage, "completion_tokens", None))
-    return GeneratorResponse(answer=answer, citations=citations)
+    prompt_tokens = getattr(usage, "prompt_tokens", None)
+    completion_tokens = getattr(usage, "completion_tokens", None)
+    log.info("generate.done", answer_len=len(answer), prompt_tokens=prompt_tokens, completion_tokens=completion_tokens)
+    return GeneratorResponse(answer=answer, citations=citations, prompt_tokens=prompt_tokens, completion_tokens=completion_tokens)
 
 
 @retry(

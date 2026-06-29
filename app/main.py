@@ -7,10 +7,14 @@ from typing import AsyncGenerator
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
+from app.limiter import limiter
 from app.obs.logging import configure_logging, get_logger, request_id_var
 from app.rag import embedder, reranker
 from app.routes import health, index, query
+from app.settings import settings
 
 log = get_logger(__name__)
 
@@ -26,7 +30,12 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="AI PDF Assistant", lifespan=_lifespan)
+    docs_url = None if settings.environment == "prod" else "/docs"
+    redoc_url = None if settings.environment == "prod" else "/redoc"
+    app = FastAPI(title="AI PDF Assistant", lifespan=_lifespan, docs_url=docs_url, redoc_url=redoc_url)
+
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
 
     @app.middleware("http")
     async def _attach_request_id(request: Request, call_next):  # type: ignore[no-untyped-def]

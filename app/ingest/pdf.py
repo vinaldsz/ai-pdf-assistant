@@ -112,6 +112,10 @@ async def _assert_host_is_public(hostname: str) -> None:
 
 
 def _assert_ip_is_public(addr: IPv4Address | IPv6Address) -> None:
+    # Unwrap IPv4-mapped IPv6 addresses (e.g. ::ffff:169.254.169.254) before
+    # the blocklist check — otherwise they bypass all IPv4 network rules.
+    if isinstance(addr, IPv6Address) and addr.ipv4_mapped is not None:
+        addr = addr.ipv4_mapped
     for net in _BLOCKED_NETWORKS:
         if addr in net:
             raise ValueError(f"URL resolves to a blocked address ({addr})")

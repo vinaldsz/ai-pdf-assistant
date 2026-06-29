@@ -3,11 +3,12 @@ GET  /jobs/{job_id} — check ingestion status.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from pydantic import BaseModel
 
 from app.ingest import jobs
 from app.ingest.pdf import ingest_from_url
+from app.limiter import limiter
 
 router = APIRouter()
 
@@ -31,7 +32,8 @@ class JobResponse(BaseModel):
 
 
 @router.post("/index", response_model=IndexResponse, status_code=202)
-async def index_endpoint(body: IndexRequest, background_tasks: BackgroundTasks) -> IndexResponse:
+@limiter.limit("5/minute")
+async def index_endpoint(request: Request, body: IndexRequest, background_tasks: BackgroundTasks) -> IndexResponse:
     job = jobs.create_job(source_url=body.url)
     background_tasks.add_task(_run_ingestion, job.id, body.url)
     return IndexResponse(job_id=job.id, status=job.status)
@@ -62,5 +64,10 @@ async def _run_ingestion(job_id: str, url: str) -> None:
             doc_id=result.doc_id,
             chunk_count=result.chunk_count,
         )
-    except Exception as exc:
+    except ValueError as exc:
+        # ValueError messages are safe to surface — they come from our own validation
         jobs.update_job(job_id, status=jobs.JobStatus.FAILED, error=str(exc))
+    except Exception:
+        # Generic exceptions may contain DSN fragments, hostnames, or stack details —
+        # return an opaque message so infra details don't leak via GET /jobs/{id}.
+        jobs.update_job(job_id, status=jobs.JobStatus.FAILED, error="ingestion failed")
