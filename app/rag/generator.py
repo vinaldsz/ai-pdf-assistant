@@ -1,8 +1,9 @@
 """Prompt builder and Groq LLM completion with tenacity retries."""
 from __future__ import annotations
 
+from collections.abc import AsyncGenerator
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, AsyncGenerator
+from typing import TYPE_CHECKING
 
 from openai import APIStatusError, AsyncOpenAI, AsyncStream
 from openai.types.chat import ChatCompletionChunk, ChatCompletionMessageParam

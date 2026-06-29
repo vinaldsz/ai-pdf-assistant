@@ -68,9 +68,16 @@ def test_langfuse_noop_when_keys_absent(monkeypatch):
 
 def test_langfuse_span_no_side_effects_without_trace(monkeypatch):
     """span() is safe to call even when no trace is active in the context var."""
+    from unittest.mock import MagicMock
+
     from app.obs import langfuse as lf
 
-    monkeypatch.setattr(lf, "_is_enabled", lambda: True)
-    # _trace_var is default=None, so span.__enter__ should do nothing
+    mock_client = MagicMock()
+    # Patch _client directly so no real Langfuse connection is attempted
+    monkeypatch.setattr(lf, "_client", lambda: mock_client)
+
+    # _trace_cm_var defaults to None — span.__enter__ must not create a child observation
     with lf.span("generate", input={"x": 1}) as s:
         s.set_output({"y": 2})
+
+    mock_client.start_as_current_observation.assert_not_called()

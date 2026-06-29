@@ -12,11 +12,11 @@ from pgvector.asyncpg import register_vector
 from app.rag.chunker import Chunk
 from app.settings import settings
 
-_pool: asyncpg.Pool | None = None  # type: ignore[type-arg]
+_pool: asyncpg.Pool | None = None
 _pool_lock = asyncio.Lock()
 
 
-async def get_pool() -> asyncpg.Pool:  # type: ignore[type-arg]
+async def get_pool() -> asyncpg.Pool:
     global _pool
     if _pool is None:
         async with _pool_lock:
@@ -25,11 +25,11 @@ async def get_pool() -> asyncpg.Pool:  # type: ignore[type-arg]
     return _pool
 
 
-async def _create_pool() -> asyncpg.Pool:  # type: ignore[type-arg]
-    async def _init(conn: asyncpg.Connection) -> None:  # type: ignore[type-arg]
+async def _create_pool() -> asyncpg.Pool:
+    async def _init(conn: asyncpg.Connection) -> None:
         await register_vector(conn)
 
-    return await asyncpg.create_pool(_dsn(), init=_init, min_size=1, max_size=10)  # type: ignore[return-value]
+    return await asyncpg.create_pool(_dsn(), init=_init, min_size=1, max_size=10)
 
 
 def _dsn() -> str:

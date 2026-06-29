@@ -28,7 +28,7 @@ def test_build_context_ceiling_enforced_on_single_large_chunk():
 
 
 def test_build_context_ceiling_enforced_across_many_chunks():
-    # 20 chunks × 500 chars = 10,000 chars total, well over the 6,000 ceiling
+    # 20 chunks x 500 chars = 10,000 chars total, well over the 6,000 ceiling
     chunks = [_r("a" * 500, page=i) for i in range(20)]
     context = _build_context(chunks)
     assert len(context) <= _MAX_CONTEXT_CHARS

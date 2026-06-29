@@ -33,7 +33,7 @@ def _client() -> Any:
     if not _is_enabled():
         return None
     if _client_instance is None:
-        from langfuse import Langfuse  # noqa: PLC0415
+        from langfuse import Langfuse
         _client_instance = Langfuse(
             public_key=settings.langfuse_public_key.get_secret_value(),  # type: ignore[union-attr]
             secret_key=settings.langfuse_secret_key.get_secret_value(),  # type: ignore[union-attr]

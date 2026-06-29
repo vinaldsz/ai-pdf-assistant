@@ -67,7 +67,7 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --frozen
-      - run: uv run pip-audit
+      - run: uv run pip-audit --skip-editable
       - run: uv run bandit -r app/ -ll -q
 
   docker:

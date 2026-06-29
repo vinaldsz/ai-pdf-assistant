@@ -4,12 +4,11 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import io
+import re
 import socket
 from dataclasses import dataclass
 from ipaddress import IPv4Address, IPv6Address, ip_address, ip_network
 from urllib.parse import urljoin, urlparse
-
-import re
 
 import httpx
 from pypdf import PdfReader
@@ -62,8 +61,8 @@ async def ingest_bytes(pdf_bytes: bytes, *, source_url: str) -> IngestResult:
             loop.run_in_executor(None, _parse_pdf, pdf_bytes),
             timeout=60.0,
         )
-    except asyncio.TimeoutError:
-        raise ValueError("PDF parsing timed out (60 s limit)")
+    except TimeoutError:
+        raise ValueError("PDF parsing timed out (60 s limit)") from None
     chunks = _chunk_pages(pages)
     texts = [c.text for c in chunks]
     vectors: list[list[float]] = await loop.run_in_executor(None, embedder.encode_batch, texts)
@@ -163,7 +162,7 @@ async def _download(url: str) -> bytes:
 
                 return b"".join(buf)
 
-    raise ValueError(f"Too many redirects (max {_MAX_REDIRECTS})")  # type: ignore[return]
+    raise ValueError(f"Too many redirects (max {_MAX_REDIRECTS})")
 
 
 def _parse_pdf(pdf_bytes: bytes) -> list[tuple[int, str]]:

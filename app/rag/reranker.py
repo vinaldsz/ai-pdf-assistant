@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 from functools import lru_cache
+from typing import Any
 
 from app.obs.logging import get_logger
 from app.rag.retriever import RetrievalResult  # lightweight — no torch dep
@@ -17,7 +18,7 @@ _warmed: bool = False  # set True after warmup(); checked by /ready
 
 
 @lru_cache(maxsize=1)
-def _model():  # type: ignore[return]
+def _model() -> Any:
     from sentence_transformers import CrossEncoder  # lazy — avoids torch at import time
     return CrossEncoder(settings.reranker_model, device="cpu")
 
@@ -32,7 +33,7 @@ def _rerank_sync(query: str, chunks: list[RetrievalResult], k: int) -> list[Retr
         return []
     pairs = [(query, c.text) for c in chunks]
     scores = _model().predict(pairs, show_progress_bar=False)
-    ranked = sorted(zip(scores, chunks), key=lambda x: x[0], reverse=True)
+    ranked = sorted(zip(scores, chunks, strict=False), key=lambda x: x[0], reverse=True)
     return [c for _, c in ranked[:k]]
 
 

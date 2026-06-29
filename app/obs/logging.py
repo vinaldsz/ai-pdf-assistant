@@ -11,6 +11,7 @@ from __future__ import annotations
 import contextvars
 import logging
 import sys
+from typing import Any
 
 import structlog
 
@@ -29,7 +30,7 @@ def _add_request_id(
 
 def configure_logging(log_level: str = "INFO") -> None:
     """Call once at app startup to configure structlog + stdlib logging."""
-    shared_processors: list = [
+    shared_processors: list[Any] = [
         structlog.stdlib.add_log_level,
         structlog.stdlib.add_logger_name,
         structlog.processors.TimeStamper(fmt="iso"),
@@ -38,10 +39,7 @@ def configure_logging(log_level: str = "INFO") -> None:
     ]
 
     structlog.configure(
-        processors=shared_processors
-        + [
-            structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
-        ],
+        processors=[*shared_processors, structlog.stdlib.ProcessorFormatter.wrap_for_formatter],
         logger_factory=structlog.stdlib.LoggerFactory(),
         wrapper_class=structlog.stdlib.BoundLogger,
         cache_logger_on_first_use=True,
@@ -64,4 +62,4 @@ def configure_logging(log_level: str = "INFO") -> None:
 
 
 def get_logger(name: str) -> structlog.stdlib.BoundLogger:
-    return structlog.get_logger(name)
+    return structlog.get_logger(name)  # type: ignore[no-any-return]

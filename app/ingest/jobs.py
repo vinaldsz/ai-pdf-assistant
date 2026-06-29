@@ -3,10 +3,10 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 
-class JobStatus(str, Enum):
+class JobStatus(StrEnum):
     QUEUED = "queued"
     RUNNING = "running"
     DONE = "done"

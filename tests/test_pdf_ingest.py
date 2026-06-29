@@ -3,11 +3,11 @@
 These tests are network-free: bare IP tests bypass DNS. The dedup test mocks
 the store so no DB connection is needed.
 """
-import pytest
 from unittest.mock import AsyncMock, patch
 
-from app.ingest.pdf import _validate_url, ingest_bytes
+import pytest
 
+from app.ingest.pdf import _validate_url, ingest_bytes
 
 # ---------------------------------------------------------------------------
 # _validate_url — scheme enforcement

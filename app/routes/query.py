@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import unicodedata
+from collections.abc import AsyncGenerator
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import StreamingResponse
@@ -102,7 +103,7 @@ async def query_stream_endpoint(request: Request, body: QueryRequest) -> Streami
         log.info("query.stream.no_results")
         lf.end_trace(output={"answer": "no_results"})
 
-        async def _no_answer_sse():
+        async def _no_answer_sse() -> AsyncGenerator[str, None]:
             yield f"data: {json.dumps({'token': _NO_ANSWER})}\n\n"
             yield f"data: {json.dumps({'citations': [], 'done': True})}\n\n"
 
@@ -122,7 +123,7 @@ async def query_stream_endpoint(request: Request, body: QueryRequest) -> Streami
         for c in reranked
     ]
 
-    async def _stream_sse():
+    async def _stream_sse() -> AsyncGenerator[str, None]:
         token_count = 0
         try:
             with lf.span("generate", input={"chunks": len(reranked)}) as s:

@@ -1,8 +1,8 @@
 """Route-level tests — no real DB, Groq, or model calls."""
 import json
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.main import app

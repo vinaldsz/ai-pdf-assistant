@@ -35,7 +35,7 @@ def test_page_and_index_metadata_preserved():
 
 
 def test_overlap_carry_over():
-    # 10 × 8-char words = 89 chars; chunk_size=40 forces a split, overlap=10 carries tail
+    # 10 x 8-char words = 89 chars; chunk_size=40 forces a split, overlap=10 carries tail
     text = " ".join(["abcdefgh"] * 10)
     chunks = chunk_text(text, page=1, chunk_size=40, chunk_overlap=10)
     assert len(chunks) >= 2

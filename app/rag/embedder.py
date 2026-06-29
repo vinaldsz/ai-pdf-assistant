@@ -24,7 +24,7 @@ def encode_batch(texts: list[str]) -> list[list[float]]:
     if not texts:
         return []
     embeddings = _model().encode(texts, normalize_embeddings=True, show_progress_bar=False)
-    return embeddings.tolist()  # type: ignore[return-value]
+    return embeddings.tolist()  # type: ignore[no-any-return]
 
 
 async def warmup() -> None:

@@ -1,9 +1,9 @@
 """Unit tests for app/rag/retriever.py — RRF math and below-threshold short-circuit."""
-import pytest
 from unittest.mock import AsyncMock, patch
 
-from app.rag.retriever import RetrievalResult, _rrf, retrieve
+import pytest
 
+from app.rag.retriever import RetrievalResult, _rrf, retrieve
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -24,7 +24,7 @@ def test_rrf_chunk_in_both_lists_ranks_higher_than_exclusive_chunks():
     dense  = [_r("a"), _r("b"), _r("c")]
     sparse = [_r("c"), _r("b"), _r("d")]
     result = _rrf(dense, sparse)
-    ids = [r.chunk_id for r in result]
+    [r.chunk_id for r in result]
     # "b" (rank 1 + rank 1) and "c" (rank 2 + rank 0) both appear in both lists;
     # verify they appear before chunks that only appear in one list.
     shared = {"b", "c"}

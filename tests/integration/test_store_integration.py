@@ -166,7 +166,7 @@ async def test_sha256_dedup_raises_on_duplicate(pool: asyncpg.Pool) -> None:  # 
     """Inserting the same sha256 twice raises a unique constraint error."""
     await _insert(sha256="sha_dedup")
 
-    with pytest.raises(Exception):  # asyncpg.UniqueViolationError
+    with pytest.raises(asyncpg.PostgresError):
         await _insert(sha256="sha_dedup")
 
     # The first insert is still intact
@@ -179,7 +179,7 @@ async def test_transaction_rollback_on_bad_vector(pool: asyncpg.Pool) -> None:  
     chunks = [Chunk(text="test chunk", page=1, index=0)]
     bad_vectors = [[0.1] * 100]  # wrong dimension — vector(384) column rejects this
 
-    with pytest.raises(Exception):
+    with pytest.raises(asyncpg.PostgresError):
         await _store.insert_document_with_chunks(
             sha256="sha_rollback",
             source_url="https://example.com/rollback.pdf",

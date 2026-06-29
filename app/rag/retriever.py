@@ -29,7 +29,7 @@ async def retrieve(query: str, *, top_k: int | None = None) -> list[RetrievalRes
     Returns an empty list when the best dense score < MIN_SIMILARITY (triggers
     the "I don't know" path in the generator — no LLM call is made).
     """
-    from app.rag import embedder, store  # noqa: PLC0415
+    from app.rag import embedder, store
 
     k = top_k if top_k is not None else settings.top_k
 
