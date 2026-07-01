@@ -150,19 +150,27 @@ async def dense_search(
 
 
 async def sparse_search(query: str, limit: int) -> list[dict[str, Any]]:
-    """Full-text keyword search via tsvector. Returns rows ordered by ts_rank_cd."""
+    """Full-text keyword search via tsvector. Returns rows ordered by ts_rank_cd.
+
+    Uses OR between query terms (via websearch_to_tsquery) so multi-term queries
+    return chunks matching ANY term — ts_rank_cd naturally ranks chunks that match
+    MORE terms higher. AND logic (plainto_tsquery) misses too many chunks in small
+    corpora where related terms land in adjacent chunks rather than the same one.
+    """
+    # Join with "OR" so websearch_to_tsquery produces term1 | term2 | ...
+    or_query = " OR ".join(query.split())
     pool = await get_pool()
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
             SELECT id, doc_id, page, text,
-                   ts_rank_cd(tsv, plainto_tsquery('english', $1)) AS score
+                   ts_rank_cd(tsv, websearch_to_tsquery('english', $1)) AS score
             FROM chunks
-            WHERE tsv @@ plainto_tsquery('english', $1)
+            WHERE tsv @@ websearch_to_tsquery('english', $1)
             ORDER BY score DESC
             LIMIT $2
             """,
-            query,
+            or_query,
             limit,
         )
         return [dict(r) for r in rows]
