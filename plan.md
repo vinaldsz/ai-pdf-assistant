@@ -134,7 +134,7 @@ ai-pdf-assistant/
 - [x] Write `eval/gold.jsonl` — 30 (question, reference_answer, key_terms) pairs from the Attention Is All You Need paper
 - [x] `eval/run.py`: custom LLM-as-judge with `faithfulness`, `answer_relevancy`, `context_precision`, `context_recall` (Ragas dropped — broken import with langchain 0.3+)
 - [x] Groq as the judge model (uses free quota)
-- [ ] Commit baseline numbers in `eval/baseline.json` — run `python -m eval.run --save-baseline` against live API
+- [x] Commit baseline numbers in `eval/baseline.json` — run `python -m eval.run --save-baseline` against live API
 - [x] **Performance baseline:** p50/p95 latency recorded per run; `--save-baseline` persists to `eval/baseline.json`; regression threshold 10% quality / 20% latency
 - [x] Document how to re-run: `python -m eval.run`
 
@@ -177,29 +177,29 @@ Full baseline: faithfulness=0.362, answer_relevancy=0.749, context_precision=0.2
 - `app/routes/query.py`: rate limit 30/minute (aligned with Groq RPM cap)
 
 **Next step:**
-- [ ] Investigate sparse (tsvector) retrieval — exact-term queries (BLEU scores, hyperparams) should score high on BM25 but recall is still 0.38; check if sparse results are contributing
+- [x] Investigate sparse (tsvector) retrieval — switched from `plainto_tsquery` (AND) to `websearch_to_tsquery` (OR) so multi-term queries return any matching chunk; `ts_rank_cd` still rewards chunks matching more terms
 
 ## Day 9 — CI pipeline
 
-- [ ] Integration tests using `testcontainers` (real pgvector in CI) — covers `store.py` insert + query round-trip, sha256 dedup, transactional rollback on chunk failure
-- [ ] `.github/workflows/ci.yml`: `ruff` lint, `mypy`/`pyright`, full `pytest` suite (unit + integration), `pip-audit`, `bandit`
+- [x] Integration tests using `testcontainers` (real pgvector in CI) — covers `store.py` insert + query round-trip, sha256 dedup, transactional rollback on chunk failure
+- [x] `.github/workflows/ci.yml`: `ruff` lint, `mypy`, full `pytest` suite (unit + integration), `pip-audit`, `bandit`
 - [ ] Eval job runs on PR (warn-only initially; gate later) — note: eval uses Groq as both generator and Ragas judge; a 30-question set can consume 50–100 Groq requests per run, so consider running on a schedule rather than every PR push to avoid exhausting the 1M token/day free quota
-- [ ] Build + push image to GHCR on push to `main`
+- [x] Build + push image to GHCR on push to `main`
 
 ## Day 10 — Cloudflare R2 for PDFs
 
-- [ ] Sign up Cloudflare R2 (no credit card needed for 10 GB tier)
-- [ ] Create bucket; mint scoped API token
-- [ ] `boto3` against R2's S3-compatible endpoint
+- [x] Sign up Cloudflare R2 (no credit card needed for 10 GB tier)
+- [x] Create bucket; mint scoped API token
+- [x] `boto3` against R2's S3-compatible endpoint (`app/ingest/r2.py`; upload wired into `ingest_bytes()` after sha256 dedup)
 - [ ] `POST /index` accepts URL **or** multipart upload → store original PDF in R2 → ingestion job pulls from R2
-- [ ] R2 keys/secrets via Pydantic settings
+- [x] R2 keys/secrets via Pydantic settings
 
 ## Day 11 — Neon Postgres
 
-- [ ] Create Neon free project; enable `pgvector` extension
-- [ ] Run Alembic migrations against Neon
-- [ ] Switch local `DATABASE_URL` to Neon for a smoke test
-- [ ] Verify HNSW index built; sanity-check query latency
+- [x] Create Neon free project; enable `pgvector` extension
+- [x] Run Alembic migrations against Neon
+- [x] Switch local `DATABASE_URL` to Neon for a smoke test
+- [x] Verify HNSW index built; sanity-check query latency
 - [ ] Document the connection-pooling caveat (Neon sleeps; use pooled URL)
 
 ## Day 12 — Deploy API to Fly.io + UI to HF Spaces
@@ -214,37 +214,37 @@ Full baseline: faithfulness=0.362, answer_relevancy=0.749, context_precision=0.2
 
 **Rate limiting & abuse**
 
-- [ ] `slowapi` rate limiting: 10 req/min/IP on `/query`, 5 req/min/IP on `/index` — do this before sharing any public URL; one script can exhaust the Groq 30 RPM free-tier quota in seconds
+- [x] `slowapi` rate limiting: 30 req/min/IP on `/query` (aligned with Groq RPM cap), 5 req/min/IP on `/index`
 - [ ] Cap concurrent background ingestion jobs with `asyncio.Semaphore(3)` in `_run_ingestion` — prevents OOM on the 512 MB Fly VM from simultaneous download+embed+write pipelines
 
 **Input validation**
 
-- [ ] `QueryRequest.query`: add `Field(..., min_length=1, max_length=2000)` and a `field_validator` that strips control characters (`ch < " "` except `\t\n`) — closes unbounded CPU spike on embedder and token-burn on Groq
-- [ ] PDF page-count guard in `_parse_pdf`: reject if `len(reader.pages) > 500` before extracting text — a valid 50 MB PDF can produce ~30k chunks otherwise
+- [x] `QueryRequest.query`: `Field(..., min_length=1, max_length=2000)` + `field_validator` strips control characters — closes unbounded CPU spike on embedder and token-burn on Groq
+- [x] PDF page-count guard in `_parse_pdf`: reject if `len(reader.pages) > 500` before extracting text
 
 **Error & info leakage**
 
-- [ ] `app/routes/health.py:27`: replace `f"error: {exc}"` with `"error: unreachable"` — raw asyncpg exceptions can contain DSN passwords in the response body
-- [ ] `app/routes/index.py:66`: catch `ValueError` separately (surface message) vs `Exception` (return generic `"ingestion failed"`) — prevents infra details (hostnames, ports) leaking via `GET /jobs/{id}`
-- [ ] Disable OpenAPI docs in prod: `FastAPI(docs_url=None, redoc_url=None)` when `settings.environment == "prod"`
+- [x] `app/routes/health.py`: replaced `f"error: {exc}"` with `"error: unreachable"` — prevents DSN passwords leaking in DB-down responses
+- [x] `app/routes/index.py`: `ValueError` caught separately (safe message surfaced) vs `Exception` (returns generic `"ingestion failed"`)
+- [x] Disable OpenAPI docs in prod: `FastAPI(docs_url=None, redoc_url=None, openapi_url=None)` when `settings.environment == "prod"`
 
 **SSRF hardening**
 
-- [ ] Block IPv4-mapped IPv6 addresses (`::ffff:169.254.169.254` etc.) by unwrapping `addr.ipv4_mapped` before blocklist check in `_assert_ip_is_public`
+- [x] Block IPv4-mapped IPv6 addresses (`::ffff:169.254.169.254` etc.) by unwrapping `addr.ipv4_mapped` before blocklist check in `_assert_ip_is_public`
 - [ ] DNS rebinding mitigation: resolve hostname once, assert IP, pass resolved IP directly to httpx with `Host` header — eliminates the second DNS lookup between validation and connect (low practical risk for v0.1 but required before prod)
 - [x] SSRF guard already in place: `https`-only, RFC1918 + loopback + `169.254.0.0/16` blocklist, redirect re-validation, 50 MB streaming cap
 
 **PDF parsing safety**
 
-- [ ] Wrap `_parse_pdf` in `run_in_executor` + `asyncio.wait_for(..., timeout=60.0)` — currently runs synchronously in a BackgroundTask on the event loop; a decompression-bomb PDF can stall all other requests
-- [ ] Catch `pypdf.errors.PdfReadError` in `_parse_pdf` and re-raise as `ValueError("PDF could not be read")` — prevents raw pypdf error messages reaching the job store
+- [x] Wrap `_parse_pdf` in `run_in_executor` + `asyncio.wait_for(..., timeout=60.0)` — CPU-bound parse runs in a thread; 60s timeout kills decompression-bomb PDFs
+- [x] Catch `pypdf.errors.PdfReadError` in `_parse_pdf` and re-raise as `ValueError("PDF could not be parsed: ...")` — prevents raw pypdf messages reaching the job store
 
 **Existing items**
 
-- [ ] Confirm no tracebacks leak in responses (only opaque error IDs)
+- [x] Confirm no tracebacks leak in responses (only opaque error IDs)
 - [x] PDF size guard in `app/ingest/pdf.py`: streaming download aborts if body exceeds 50 MB
 - [ ] Sentry SDK wired (free tier, 5k events/mo)
-- [ ] Pin and audit dependencies (`pip-audit`); confirm Docker/CI uses `uv sync --frozen`
+- [x] Pin and audit dependencies (`pip-audit` + `bandit` in CI); Docker/CI uses `uv sync --frozen`
 
 ## Day 14 — Docs + Runbook
 
