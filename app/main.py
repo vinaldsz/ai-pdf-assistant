@@ -31,10 +31,13 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 
 def create_app() -> FastAPI:
-    docs_url = None if settings.environment == "prod" else "/docs"
-    redoc_url = None if settings.environment == "prod" else "/redoc"
+    is_prod = settings.environment == "prod"
     app = FastAPI(
-        title="AI PDF Assistant", lifespan=_lifespan, docs_url=docs_url, redoc_url=redoc_url
+        title="AI PDF Assistant",
+        lifespan=_lifespan,
+        docs_url=None if is_prod else "/docs",
+        redoc_url=None if is_prod else "/redoc",
+        openapi_url=None if is_prod else "/openapi.json",
     )
 
     app.state.limiter = limiter
