@@ -54,6 +54,10 @@ async def ingest_bytes(pdf_bytes: bytes, *, source_url: str) -> IngestResult:
     if existing is not None:
         return IngestResult(doc_id=str(existing["id"]), skipped=True, chunk_count=0)
 
+    from app.ingest import r2
+
+    await r2.upload(f"{sha256}.pdf", pdf_bytes)
+
     from app.rag import embedder  # implemented Day 3
 
     loop = asyncio.get_running_loop()
