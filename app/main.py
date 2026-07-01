@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -20,13 +21,19 @@ from app.settings import settings
 log = get_logger(__name__)
 
 
+_background_tasks: set[asyncio.Task] = set()  # keeps task refs alive until done
+
+
 @asynccontextmanager
 async def _lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     configure_logging(log_level="INFO")
-    log.info("startup: warming up models")
-    await embedder.warmup()
-    await reranker.warmup()
-    log.info("startup: complete")
+    log.info("startup: warming up models in background")
+    # Fire warmup as background tasks so uvicorn starts accepting connections
+    # immediately. /ready returns 503 until both _warmed flags are set.
+    for coro in (embedder.warmup(), reranker.warmup()):
+        t = asyncio.create_task(coro)
+        _background_tasks.add(t)
+        t.add_done_callback(_background_tasks.discard)
     yield
 
 
