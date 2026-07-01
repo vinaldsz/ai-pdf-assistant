@@ -154,20 +154,30 @@ Full baseline: faithfulness=0.362, answer_relevancy=0.749, context_precision=0.2
 | Baseline (chunk=800, refs included) | 0.362 | 0.749 | 0.282 | 0.393 | 30 |
 | skip_refs + chunk=1200 | 0.291 | 0.808 | 0.202 | 0.242 | 20 (10 got 429) |
 | skip_refs + chunk=800 | n/a | n/a | n/a | n/a | 1 (quota gone) |
+| **refs_only + chunk=800** | **0.328** | **0.790** | **0.327** | **0.379** | **30/30** |
 
 **Findings from experiments:**
 - chunk_size=1200 → WORSE: produces fewer total chunks (31 vs 48 with 800) → less coverage → lower recall
 - References fix is structurally correct (max page now 10, no bibliography chunks in DB)
 - Tuning (MIN_SIMILARITY 0.20, TOP_K 30) also backfired: flooded reranker with noise, pushed relevant chunks past RERANK_K=5 cutoff
 - Groq free tier is ~100k tokens/day (not 1M); a full 30-question run + Ragas judge consumes the full daily budget
+- **Rate limiter (10/min on /query) blocks eval runs** — raised to 30/min to match Groq's own RPM cap
+
+**refs_only_chunk_800 vs baseline delta:**
+- Context precision: +0.045 (+16pp) ✅ — fewer bibliography chunks in top-5, more relevant results
+- Answer relevancy: +0.041 (+5pp) ✅ — answers more on-topic without citation noise
+- Context recall: -0.014 (-4pp) ≈ noise — within expected variance for n=30
+- Faithfulness: -0.034 (-9pp) — slight drop; LLM may hallucinate slightly more when chunks are shorter
+
+**Conclusion:** References fix is net positive. Keep it. Precision gain is real; faithfulness/recall deltas are within noise.
 
 **Current state:**
 - `app/ingest/pdf.py`: references section regex skip is in place (keep)
 - `app/settings.py`: chunk_size=800, chunk_overlap=80, top_k=20, min_similarity=0.30 (all back to baseline)
+- `app/routes/query.py`: rate limit 30/minute (aligned with Groq RPM cap)
 
-**Next step (when eval budget is available):**
-- [ ] Re-run eval with just the references fix (chunk=800) to measure its isolated impact
-- [ ] If recall still low, investigate sparse (tsvector) retrieval — exact-term queries should score high on BM25 but may not be if the sparse index isn't contributing
+**Next step:**
+- [ ] Investigate sparse (tsvector) retrieval — exact-term queries (BLEU scores, hyperparams) should score high on BM25 but recall is still 0.38; check if sparse results are contributing
 
 ## Day 9 — CI pipeline
 

@@ -48,7 +48,7 @@ class QueryResponse(BaseModel):
 
 
 @router.post("/query", response_model=QueryResponse)
-@limiter.limit("10/minute")
+@limiter.limit("30/minute")
 async def query_endpoint(request: Request, body: QueryRequest) -> QueryResponse:
     log.info("query", query=body.query[:120])
     lf.start_trace("query", input={"query": body.query})
@@ -93,7 +93,7 @@ async def query_endpoint(request: Request, body: QueryRequest) -> QueryResponse:
 
 
 @router.post("/query/stream")
-@limiter.limit("10/minute")
+@limiter.limit("30/minute")
 async def query_stream_endpoint(request: Request, body: QueryRequest) -> StreamingResponse:
     """SSE endpoint — yields `data: {"token": "..."}` events, then a final
     `data: {"citations": [...], "done": true}` event."""
