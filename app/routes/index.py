@@ -4,6 +4,8 @@ GET  /jobs/{job_id} — check ingestion status.
 
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
 from pydantic import BaseModel
 
@@ -12,6 +14,8 @@ from app.ingest.pdf import ingest_from_url
 from app.limiter import limiter
 
 router = APIRouter()
+
+_ingestion_sem = asyncio.Semaphore(3)
 
 
 class IndexRequest(BaseModel):
@@ -58,19 +62,20 @@ async def get_job(job_id: str) -> JobResponse:
 
 
 async def _run_ingestion(job_id: str, url: str) -> None:
-    jobs.update_job(job_id, status=jobs.JobStatus.RUNNING)
-    try:
-        result = await ingest_from_url(url)
-        jobs.update_job(
-            job_id,
-            status=jobs.JobStatus.DONE,
-            doc_id=result.doc_id,
-            chunk_count=result.chunk_count,
-        )
-    except ValueError as exc:
-        # ValueError messages are safe to surface — they come from our own validation
-        jobs.update_job(job_id, status=jobs.JobStatus.FAILED, error=str(exc))
-    except Exception:
-        # Generic exceptions may contain DSN fragments, hostnames, or stack details —
-        # return an opaque message so infra details don't leak via GET /jobs/{id}.
-        jobs.update_job(job_id, status=jobs.JobStatus.FAILED, error="ingestion failed")
+    async with _ingestion_sem:
+        jobs.update_job(job_id, status=jobs.JobStatus.RUNNING)
+        try:
+            result = await ingest_from_url(url)
+            jobs.update_job(
+                job_id,
+                status=jobs.JobStatus.DONE,
+                doc_id=result.doc_id,
+                chunk_count=result.chunk_count,
+            )
+        except ValueError as exc:
+            # ValueError messages are safe to surface — they come from our own validation
+            jobs.update_job(job_id, status=jobs.JobStatus.FAILED, error=str(exc))
+        except Exception:
+            # Generic exceptions may contain DSN fragments, hostnames, or stack details —
+            # return an opaque message so infra details don't leak via GET /jobs/{id}.
+            jobs.update_job(job_id, status=jobs.JobStatus.FAILED, error="ingestion failed")
