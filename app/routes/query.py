@@ -130,7 +130,7 @@ async def query_stream_endpoint(request: Request, body: QueryRequest) -> Streami
         {
             "doc_id": c.doc_id,
             "page": c.page,
-            "snippet": _truncate(c.text, 500),
+            "snippet": c.text,
             "score": round(c.score, 4),
         }
         for c in reranked
