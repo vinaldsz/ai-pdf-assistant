@@ -18,7 +18,7 @@ _warmed: bool = False  # set True after warmup(); checked by /ready
 def _model() -> SentenceTransformer:
     from sentence_transformers import SentenceTransformer  # lazy — avoids torch at import time
 
-    return SentenceTransformer(settings.embedding_model, device="cpu")
+    return SentenceTransformer(settings.embedding_model, device="cpu")  # type: ignore[no-any-return]
 
 
 def encode_batch(texts: list[str]) -> list[list[float]]:
@@ -26,7 +26,7 @@ def encode_batch(texts: list[str]) -> list[list[float]]:
     if not texts:
         return []
     embeddings = _model().encode(texts, normalize_embeddings=True, show_progress_bar=False)
-    return embeddings.tolist()  # type: ignore[no-any-return]
+    return embeddings.tolist()
 
 
 async def warmup() -> None:
