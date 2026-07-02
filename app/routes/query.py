@@ -24,6 +24,14 @@ log = get_logger(__name__)
 _NO_ANSWER = "I don't have enough information in the indexed documents to answer that question."
 
 
+def _truncate(text: str, limit: int) -> str:
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    end = max(cut.rfind(". "), cut.rfind("? "), cut.rfind("! "))
+    return cut[: end + 1].strip() if end > limit // 2 else cut.rstrip() + "..."
+
+
 class QueryRequest(BaseModel):
     query: str = Field(..., min_length=1, max_length=2000)
 
@@ -122,7 +130,7 @@ async def query_stream_endpoint(request: Request, body: QueryRequest) -> Streami
         {
             "doc_id": c.doc_id,
             "page": c.page,
-            "snippet": c.text[:400],
+            "snippet": _truncate(c.text, 500),
             "score": round(c.score, 4),
         }
         for c in reranked
