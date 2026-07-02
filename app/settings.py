@@ -46,7 +46,9 @@ class Settings(BaseSettings):
 
     @property
     def r2_enabled(self) -> bool:
-        return all([self.r2_account_id, self.r2_access_key_id, self.r2_secret_access_key, self.r2_bucket])
+        return all(
+            [self.r2_account_id, self.r2_access_key_id, self.r2_secret_access_key, self.r2_bucket]
+        )
 
     # --- Optional: Langfuse Cloud  ---
     langfuse_public_key: SecretStr | None = Field(default=None)

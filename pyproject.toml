@@ -55,7 +55,7 @@ strict = true
 warn_unreachable = true
 
 [[tool.mypy.overrides]]
-module = ["asyncpg", "asyncpg.*", "pgvector", "pgvector.*", "sentence_transformers", "sentence_transformers.*", "langfuse", "langfuse.*", "slowapi", "slowapi.*", "ragas", "ragas.*", "datasets", "datasets.*", "testcontainers", "testcontainers.*"]
+module = ["asyncpg", "asyncpg.*", "boto3", "boto3.*", "botocore", "botocore.*", "pgvector", "pgvector.*", "sentence_transformers", "sentence_transformers.*", "langfuse", "langfuse.*", "slowapi", "slowapi.*", "ragas", "ragas.*", "datasets", "datasets.*", "testcontainers", "testcontainers.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

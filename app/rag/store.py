@@ -31,7 +31,9 @@ async def _create_pool() -> asyncpg.Pool:
         await register_vector(conn)
 
     dsn, needs_ssl = _dsn()
-    return await asyncpg.create_pool(dsn, init=_init, min_size=1, max_size=10, ssl=needs_ssl or None)
+    return await asyncpg.create_pool(
+        dsn, init=_init, min_size=1, max_size=10, ssl=needs_ssl or None
+    )
 
 
 def _dsn() -> tuple[str, bool]:
@@ -44,9 +46,10 @@ def _dsn() -> tuple[str, bool]:
     # Strip all query params — asyncpg rejects Neon's sslmode/channel_binding params.
     # SSL is passed explicitly via ssl= in create_pool().
     parsed = urlparse(url)
-    needs_ssl = (
-        "sslmode=disable" not in (parsed.query or "")
-        and parsed.hostname not in ("localhost", "127.0.0.1", "::1")
+    needs_ssl = "sslmode=disable" not in (parsed.query or "") and parsed.hostname not in (
+        "localhost",
+        "127.0.0.1",
+        "::1",
     )
     return urlunparse(parsed._replace(query="")), needs_ssl
 

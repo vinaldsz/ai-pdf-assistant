@@ -21,7 +21,7 @@ from app.settings import settings
 log = get_logger(__name__)
 
 
-_background_tasks: set[asyncio.Task] = set()  # keeps task refs alive until done
+_background_tasks: set[asyncio.Task[None]] = set()  # keeps task refs alive until done
 
 
 @asynccontextmanager
