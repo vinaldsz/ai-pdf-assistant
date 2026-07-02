@@ -116,7 +116,7 @@ def _render_citations(citations: list[dict]) -> None:  # type: ignore[type-arg]
         return
     st.markdown("**Sources**")
     for i, c in enumerate(citations, 1):
-        score_pct = int(c["score"] * 100)
+        score_pct = min(100, int(c["score"] * 100))
         snippet = c["snippet"]
         preview = _preview(snippet)
         with st.expander(f"Source {i}  ·  Page {c['page']}  ·  Relevance {score_pct}%"):
