@@ -19,8 +19,10 @@ FROM python:3.12-slim AS model-downloader
 
 COPY --from=builder /app/.venv /app/.venv
 
+ARG HF_TOKEN=""
 ENV PATH="/app/.venv/bin:$PATH" \
-    HF_HOME="/app/.cache/huggingface"
+    HF_HOME="/app/.cache/huggingface" \
+    HUGGING_FACE_HUB_TOKEN="${HF_TOKEN}"
 
 RUN python -c "\
 from sentence_transformers import SentenceTransformer, CrossEncoder; \
