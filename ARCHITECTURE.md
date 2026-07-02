@@ -16,11 +16,11 @@ flowchart TB
         Browser["Browser"]
     end
 
-    subgraph HFSpaces["Hugging Face Spaces · free"]
+    subgraph HFSpacesUI["Hugging Face Spaces · free · UI"]
         UI["Streamlit UI<br/>(pure HTTP client)"]
     end
 
-    subgraph FlyIO["Fly.io · shared-cpu-1x 512MB · free"]
+    subgraph HFSpacesAPI["Hugging Face Spaces · CPU basic · 2 vCPU · 16 GB RAM · free"]
         direction TB
         subgraph FastAPI["FastAPI service"]
             Routes["Routes<br/>/health /ready<br/>/index /query"]
@@ -47,7 +47,6 @@ flowchart TB
 
     subgraph Obs["Observability"]
         Langfuse["Langfuse Cloud<br/>traces · tokens · cost"]
-        Sentry["Sentry<br/>errors"]
         Logs["structlog<br/>JSON logs"]
     end
 
@@ -65,10 +64,9 @@ flowchart TB
     Retriever --> Neon
     Generator --> Groq
     FastAPI -. spans .-> Langfuse
-    FastAPI -. errors .-> Sentry
     FastAPI -. logs .-> Logs
     GHA -- build & push --> GHCR
-    GHCR -- deploy --> FlyIO
+    GHCR -- deploy --> HFSpacesAPI
 
     classDef storage fill:#fef3c7,stroke:#d97706,color:#000
     classDef external fill:#dbeafe,stroke:#2563eb,color:#000
@@ -76,7 +74,7 @@ flowchart TB
     classDef client fill:#dcfce7,stroke:#16a34a,color:#000
     class Neon,R2 storage
     class Groq external
-    class Langfuse,Sentry,Logs obs
+    class Langfuse,Logs obs
     class Browser,UI client
 ```
 
@@ -91,7 +89,7 @@ sequenceDiagram
     autonumber
     actor U as User
     participant UI as Streamlit (HF)
-    participant API as FastAPI (Fly)
+    participant API as FastAPI (HF)
     participant E as Embedder<br/>bge-small
     participant DB as Neon + pgvector
     participant RR as Reranker<br/>bge-reranker
@@ -168,7 +166,7 @@ sequenceDiagram
 
 - Ingestion is **idempotent**, keyed on `sha256` of the PDF bytes. Re-submitting the same PDF is a no-op.
 - The original PDF is stored in R2 *before* processing begins. This makes R2 the source of truth; if embeddings need to be regenerated (new model, new chunker), we re-ingest from R2 without data loss.
-- `/index` returns immediately with a job ID. The actual work runs in a `BackgroundTask` so the API stays responsive. When ingestion volume grows beyond a single VM, this swaps for a real queue (Upstash Redis + RQ) without changing the API surface.
+- `/index` returns immediately with a job ID. The actual work runs in a `BackgroundTask` so the API stays responsive. When ingestion volume grows beyond a single container, this swaps for a real queue (Upstash Redis + RQ) without changing the API surface.
 
 ---
 
@@ -208,10 +206,10 @@ The `embedder_version` and `chunker_version` columns matter: when either changes
 ## 5. Key Design Choices
 
 ### Stateless API
-All state lives in Neon (structured + vector data) and R2 (PDF blobs). The Fly.io VM is disposable — restart, scale, or replace freely without coordination.
+All state lives in Neon (structured + vector data) and R2 (PDF blobs). The HuggingFace Spaces container is disposable — restart, redeploy, or replace freely without coordination.
 
 ### Embedder + reranker run in-process
-No separate ML service to operate, no API cost, deterministic latency. Trade-off: ~400 MB resident memory, which is why the Fly VM is sized at 512 MB. If the model is upgraded to something larger (e.g., `bge-large`), this assumption is revisited.
+No separate ML service to operate, no API cost, deterministic latency. Both models are baked into the Docker image at build time and loaded into the FastAPI process on startup. With 16 GB of RAM available on HF Spaces CPU basic, there is comfortable headroom for `bge-small` (~90 MB) and `bge-reranker-base` (~570 MB) alongside the FastAPI process.
 
 ### Background ingestion, foreground query
 `/index` returns immediately with a job ID; `/query` is synchronous and streams tokens via SSE. This is the right shape for a chat UX: indexing is rare and slow, querying is frequent and latency-sensitive.
@@ -251,10 +249,8 @@ These are real production needs, deferred until justified by traffic or requirem
 | Groq | 30 RPM, ~1M tokens/day | LLM completions + eval judge |
 | Neon Postgres | 0.5 GB, 190 compute-hr/mo | `documents`, `chunks`, pgvector |
 | Cloudflare R2 | 10 GB, $0 egress | Raw PDF storage |
-| Fly.io | 3× shared-cpu-1x 256MB | API runtime (sized to 512 MB) |
-| Hugging Face Spaces | Free CPU, sleeps after 48h idle | Streamlit UI |
-| Langfuse Cloud | 50k observations/mo free | Tracing (self-hosting deferred — bundles 5 containers, too heavy for an 8 GB dev laptop) |
-| Sentry | 5k events/mo | Error tracking |
+| HuggingFace Spaces | 2 vCPU, 16 GB RAM, sleeps after 48h idle | API runtime (models in-process) + Streamlit UI |
+| Langfuse Cloud | 50k observations/mo free | Tracing (self-hosting deferred — bundles 5 containers, too heavy for a dev laptop) |
 | GitHub Actions | Free for public repos | CI + image build |
 
 Target monthly cost at v0.1: **$0**.
