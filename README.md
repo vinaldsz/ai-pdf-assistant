@@ -1,13 +1,3 @@
----
-title: AI PDF Assistant
-emoji: 📄
-colorFrom: blue
-colorTo: green
-sdk: docker
-app_port: 8000
-pinned: false
----
-
 # AI PDF Assistant
 
 A production-grade Retrieval-Augmented Generation (RAG) service deployed entirely on free tiers. Users upload PDFs via URL, the system indexes them into a hybrid vector store, and users ask questions that return grounded answers with page-level citations. The full pipeline — chunking, embedding, retrieval, reranking, and generation — is implemented in approximately 150 lines of explicit Python with no RAG framework.
@@ -18,8 +8,8 @@ A production-grade Retrieval-Augmented Generation (RAG) service deployed entirel
 
 ```mermaid
 flowchart LR
-    Browser["Browser"] --> UI["Streamlit UI\nhttps://vinaldsz-ai-pdf-assistant-ui.hf.space"]
-    UI -- HTTPS --> API["FastAPI\nhttps://vinaldsz-ai-pdf-assistant.hf.space"]
+    Browser["Browser"] --> UI["Streamlit UI\nhttps://your-username-ai-pdf-assistant-ui.hf.space"]
+    UI -- HTTPS --> API["FastAPI\nhttps://your-username-ai-pdf-assistant.hf.space"]
     API --> Neon[("Neon Postgres\n+ pgvector")]
     API --> R2[("Cloudflare R2\nraw PDFs")]
     API --> Groq["Groq\nllama-3.3-70b"]
@@ -48,18 +38,18 @@ Most RAG demos use a single PDF, a single embedding call, and a single LLM call.
 
 ## Stack
 
-| Layer | Technology | Hosting |
-|---|---|---|
-| API | FastAPI + uvicorn | HuggingFace Spaces (CPU basic, 2 vCPU, 16 GB RAM) |
-| UI | Streamlit | HuggingFace Spaces (CPU basic) |
-| Embedder | `BAAI/bge-small-en-v1.5` (local, ~90 MB) | In-process on HF Spaces |
-| Reranker | `BAAI/bge-reranker-base` (local, ~570 MB) | In-process on HF Spaces |
-| Vector DB | Neon Postgres + pgvector (HNSW cosine + GIN tsvector) | Neon Cloud |
-| LLM | Groq `llama-3.3-70b-versatile` (streamed SSE) | Groq Cloud |
-| PDF storage | Cloudflare R2 | Cloudflare |
-| Observability | Langfuse Cloud (traces) + structlog (JSON logs) | Langfuse Cloud |
-| CI | GitHub Actions (lint, typecheck, security scan, tests) | GitHub |
-| Package manager | uv | — |
+| Layer           | Technology                                             | Hosting                                           |
+| --------------- | ------------------------------------------------------ | ------------------------------------------------- |
+| API             | FastAPI + uvicorn                                      | HuggingFace Spaces (CPU basic, 2 vCPU, 16 GB RAM) |
+| UI              | Streamlit                                              | HuggingFace Spaces (CPU basic)                    |
+| Embedder        | `BAAI/bge-small-en-v1.5` (local, ~90 MB)               | In-process on HF Spaces                           |
+| Reranker        | `BAAI/bge-reranker-base` (local, ~570 MB)              | In-process on HF Spaces                           |
+| Vector DB       | Neon Postgres + pgvector (HNSW cosine + GIN tsvector)  | Neon Cloud                                        |
+| LLM             | Groq `llama-3.3-70b-versatile` (streamed SSE)          | Groq Cloud                                        |
+| PDF storage     | Cloudflare R2                                          | Cloudflare                                        |
+| Observability   | Langfuse Cloud (traces) + structlog (JSON logs)        | Langfuse Cloud                                    |
+| CI              | GitHub Actions (lint, typecheck, security scan, tests) | GitHub                                            |
+| Package manager | uv                                                     | —                                                 |
 
 ---
 
@@ -109,16 +99,17 @@ uv run streamlit run ui/streamlit_app.py
 
 ## API reference
 
-| Method | Path | Description |
-|---|---|---|
-| `GET` | `/health` | Liveness check |
-| `GET` | `/ready` | Readiness check — DB connectivity and models warm |
-| `POST` | `/index` | Submit a PDF URL for background indexing |
-| `GET` | `/jobs/{id}` | Poll ingestion job status |
-| `POST` | `/query` | Ask a question, returns JSON with answer and citations |
-| `POST` | `/query/stream` | Ask a question, streams SSE tokens |
+| Method | Path            | Description                                            |
+| ------ | --------------- | ------------------------------------------------------ |
+| `GET`  | `/health`       | Liveness check                                         |
+| `GET`  | `/ready`        | Readiness check — DB connectivity and models warm      |
+| `POST` | `/index`        | Submit a PDF URL for background indexing               |
+| `GET`  | `/jobs/{id}`    | Poll ingestion job status                              |
+| `POST` | `/query`        | Ask a question, returns JSON with answer and citations |
+| `POST` | `/query/stream` | Ask a question, streams SSE tokens                     |
 
 **Index a PDF:**
+
 ```bash
 curl -X POST http://localhost:8000/index \
   -H "Content-Type: application/json" \
@@ -127,12 +118,14 @@ curl -X POST http://localhost:8000/index \
 ```
 
 **Poll job status:**
+
 ```bash
 curl http://localhost:8000/jobs/<job_id>
 # {"status": "done", "chunk_count": 66}
 ```
 
 **Query (streaming):**
+
 ```bash
 curl -N -X POST http://localhost:8000/query/stream \
   -H "Content-Type: application/json" \
@@ -144,6 +137,7 @@ curl -N -X POST http://localhost:8000/query/stream \
 ```
 
 **Query (JSON):**
+
 ```bash
 curl -X POST http://localhost:8000/query \
   -H "Content-Type: application/json" \
@@ -157,38 +151,38 @@ curl -X POST http://localhost:8000/query \
 
 All settings live in `app/settings.py` (Pydantic `BaseSettings`). Set via `.env` or environment variables. Required variables raise a `ValidationError` at import time if missing.
 
-| Variable | Required | Default | Description |
-|---|---|---|---|
-| `GROQ_API_KEY` | Yes | — | Groq API key for answer generation |
-| `DATABASE_URL` | Yes | — | Postgres connection string |
-| `LANGFUSE_PUBLIC_KEY` | No | — | Enables Langfuse tracing |
-| `LANGFUSE_SECRET_KEY` | No | — | Enables Langfuse tracing |
-| `R2_ACCOUNT_ID` | No | — | Cloudflare R2 account ID |
-| `R2_ACCESS_KEY_ID` | No | — | Cloudflare R2 access key |
-| `R2_SECRET_ACCESS_KEY` | No | — | Cloudflare R2 secret key |
-| `R2_BUCKET_NAME` | No | — | Cloudflare R2 bucket name |
-| `OPENROUTER_API_KEY` | No | — | OpenRouter key for eval judge only |
-| `EMBEDDING_MODEL` | No | `BAAI/bge-small-en-v1.5` | Sentence-transformers model |
-| `RERANKER_MODEL` | No | `BAAI/bge-reranker-base` | Cross-encoder model |
-| `LLM_MODEL` | No | `llama-3.3-70b-versatile` | Groq model ID |
-| `MIN_SIMILARITY` | No | `0.30` | Below this retrieval score, returns "I don't know" |
-| `TOP_K` | No | `20` | Candidates retrieved before reranking |
-| `RERANK_K` | No | `5` | Chunks passed to the LLM |
-| `CHUNK_SIZE` | No | `800` | Characters per chunk |
-| `CHUNK_OVERLAP` | No | `120` | Character overlap between consecutive chunks |
+| Variable               | Required | Default                   | Description                                        |
+| ---------------------- | -------- | ------------------------- | -------------------------------------------------- |
+| `GROQ_API_KEY`         | Yes      | —                         | Groq API key for answer generation                 |
+| `DATABASE_URL`         | Yes      | —                         | Postgres connection string                         |
+| `LANGFUSE_PUBLIC_KEY`  | No       | —                         | Enables Langfuse tracing                           |
+| `LANGFUSE_SECRET_KEY`  | No       | —                         | Enables Langfuse tracing                           |
+| `R2_ACCOUNT_ID`        | No       | —                         | Cloudflare R2 account ID                           |
+| `R2_ACCESS_KEY_ID`     | No       | —                         | Cloudflare R2 access key                           |
+| `R2_SECRET_ACCESS_KEY` | No       | —                         | Cloudflare R2 secret key                           |
+| `R2_BUCKET_NAME`       | No       | —                         | Cloudflare R2 bucket name                          |
+| `OPENROUTER_API_KEY`   | No       | —                         | OpenRouter key for eval judge only                 |
+| `EMBEDDING_MODEL`      | No       | `BAAI/bge-small-en-v1.5`  | Sentence-transformers model                        |
+| `RERANKER_MODEL`       | No       | `BAAI/bge-reranker-base`  | Cross-encoder model                                |
+| `LLM_MODEL`            | No       | `llama-3.3-70b-versatile` | Groq model ID                                      |
+| `MIN_SIMILARITY`       | No       | `0.30`                    | Below this retrieval score, returns "I don't know" |
+| `TOP_K`                | No       | `20`                      | Candidates retrieved before reranking              |
+| `RERANK_K`             | No       | `5`                       | Chunks passed to the LLM                           |
+| `CHUNK_SIZE`           | No       | `800`                     | Characters per chunk                               |
+| `CHUNK_OVERLAP`        | No       | `120`                     | Character overlap between consecutive chunks       |
 
 ---
 
 ## Free-tier budget
 
-| Service | Free-tier limit | Used for |
-|---|---|---|
+| Service            | Free-tier limit                          | Used for                                      |
+| ------------------ | ---------------------------------------- | --------------------------------------------- |
 | HuggingFace Spaces | 2 vCPU, 16 GB RAM, sleeps after 48h idle | API container + local ML models; UI container |
-| Groq | 30 RPM, ~1M tokens/day | LLM completions |
-| Neon Postgres | 0.5 GB, 190 compute-hr/mo | `documents`, `chunks`, pgvector indexes |
-| Cloudflare R2 | 10 GB storage, $0 egress | Raw PDF storage |
-| Langfuse Cloud | 50k observations/mo | Request tracing |
-| GitHub Actions | Free for public repos | CI: lint, typecheck, security scan, tests |
+| Groq               | 30 RPM, ~1M tokens/day                   | LLM completions                               |
+| Neon Postgres      | 0.5 GB, 190 compute-hr/mo                | `documents`, `chunks`, pgvector indexes       |
+| Cloudflare R2      | 10 GB storage, $0 egress                 | Raw PDF storage                               |
+| Langfuse Cloud     | 50k observations/mo                      | Request tracing                               |
+| GitHub Actions     | Free for public repos                    | CI: lint, typecheck, security scan, tests     |
 
 Target monthly cost: **$0**
 
@@ -199,6 +193,7 @@ Target monthly cost: **$0**
 The API and UI each live in a separate HF Space backed by a Docker image.
 
 **API Space:**
+
 ```bash
 # Add the HF remote once
 git remote add hf https://huggingface.co/spaces/vinaldsz/ai-pdf-assistant
@@ -210,11 +205,12 @@ git push hf main
 The Space reads secrets from the HF Spaces settings UI (or via the Spaces API). Set `GROQ_API_KEY`, `DATABASE_URL`, and the R2 and Langfuse variables there.
 
 **UI Space** (Streamlit, separate repo/space):
+
 ```bash
 # Copy UI files to a separate worktree and push
 cp -r ui/ /tmp/hf-ui-deploy/
 cd /tmp/hf-ui-deploy
-git init && git remote add hf https://huggingface.co/spaces/vinaldsz/ai-pdf-assistant-ui
+git init && git remote add hf
 git add . && git commit -m "deploy"
 git push hf main --force
 ```
