@@ -1,3 +1,13 @@
+---
+title: AI PDF Assistant
+emoji: 📄
+colorFrom: blue
+colorTo: green
+sdk: docker
+app_port: 8000
+pinned: false
+---
+
 # AI PDF Assistant
 
 A production-grade RAG service: upload PDFs, ask questions, get grounded answers with page citations. Built entirely on free tiers — $0/month to run.

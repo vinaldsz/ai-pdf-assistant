@@ -30,15 +30,25 @@ async def _create_pool() -> asyncpg.Pool:
     async def _init(conn: asyncpg.Connection) -> None:
         await register_vector(conn)
 
-    return await asyncpg.create_pool(_dsn(), init=_init, min_size=1, max_size=10)
+    dsn, needs_ssl = _dsn()
+    return await asyncpg.create_pool(dsn, init=_init, min_size=1, max_size=10, ssl=needs_ssl or None)
 
 
-def _dsn() -> str:
+def _dsn() -> tuple[str, bool]:
+    from urllib.parse import urlparse, urlunparse
+
     url = str(settings.database_url)
-    # asyncpg uses postgresql:// — strip SQLAlchemy driver prefix if present
-    return url.replace("postgresql+asyncpg://", "postgresql://").replace(
+    url = url.replace("postgresql+asyncpg://", "postgresql://").replace(
         "postgresql+psycopg2://", "postgresql://"
     )
+    # Strip all query params — asyncpg rejects Neon's sslmode/channel_binding params.
+    # SSL is passed explicitly via ssl= in create_pool().
+    parsed = urlparse(url)
+    needs_ssl = (
+        "sslmode=disable" not in (parsed.query or "")
+        and parsed.hostname not in ("localhost", "127.0.0.1", "::1")
+    )
+    return urlunparse(parsed._replace(query="")), needs_ssl
 
 
 # ---------------------------------------------------------------------------
