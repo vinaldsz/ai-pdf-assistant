@@ -17,7 +17,7 @@ A 2-week, free-tier plan to take this repo from "demo script" to "deployable RAG
 | Queue         | FastAPI `BackgroundTasks` → Upstash Redis if needed     | Start simple                                                   |
 | Observability | Langfuse **Cloud** (free tier) + `structlog`            | 50k observations/mo free; lighter on dev RAM than self-hosting |
 | Eval          | Ragas + Groq-as-judge                                   | Free                                                           |
-| Hosting (API) | Fly.io (shared-cpu-1x, 512 MB)                          | Free tier                                                      |
+| Hosting (API) | ~~Fly.io (shared-cpu-1x, 512 MB)~~ → Hugging Face Spaces (CPU basic, 2 vCPU/16 GB) | Changed on Day 12 — see that section |
 | Hosting (UI)  | Hugging Face Spaces                                     | Free CPU                                                       |
 | CI / Registry | GitHub Actions + GHCR                                   | Free for public repos                                          |
 | Errors        | Sentry free tier                                        | Optional                                                       |
@@ -59,9 +59,9 @@ ai-pdf-assistant/
 - [x] Create `app/` package with the layout above (empty modules first)
 - [x] Write `app/settings.py` using Pydantic `BaseSettings` (`GROQ_API_KEY`, `DATABASE_URL`, `R2_*`, `EMBEDDING_MODEL`, `CHUNK_SIZE`, `CHUNK_OVERLAP`, `TOP_K`, `RERANK_K`, `MIN_SIMILARITY`, `LOG_LEVEL`)
 - [x] Fail fast at import if required vars are missing (clear error message)
-- [ ] Delete the broken `os.environ["GROQ_API_KEY"] = os.getenv(...)` lines
-- [ ] Delete `app_api.py` (regex-based recovery shim) — replaced in Days 4–5
-- [ ] Remove duplicate `duckduckgo-search` in `requirements.txt`; pin all versions
+- [x] Delete the broken `os.environ["GROQ_API_KEY"] = os.getenv(...)` lines
+- [x] Delete `app_api.py` (regex-based recovery shim) — replaced in Days 4–5
+- [x] Remove duplicate `duckduckgo-search` in `requirements.txt`; pin all versions
 - [x] Add `__pycache__/`, `.DS_Store`, `.env`, `agentic-ai/` to `.gitignore`
 - [ ] **Tests:** `tests/test_settings.py` — `ValidationError` raised when `GROQ_API_KEY` or `DATABASE_URL` missing; all defaults match expected values; `chunk_overlap >= chunk_size` raises
 
@@ -202,20 +202,22 @@ Full baseline: faithfulness=0.362, answer_relevancy=0.749, context_precision=0.2
 - [x] Verify HNSW index built; sanity-check query latency
 - [ ] Document the connection-pooling caveat (Neon sleeps; use pooled URL)
 
-## Day 12 — Deploy API to Fly.io + UI to HF Spaces
+## Day 12 — Deploy API + UI to Hugging Face Spaces
 
-- [ ] `fly launch` → `shared-cpu-1x@512MB`
-- [ ] Set secrets: `GROQ_API_KEY`, `DATABASE_URL` (Neon pooled), `R2_*`, `LANGFUSE_*`
-- [ ] Confirm `/health` + `/ready` green on Fly
-- [ ] Deploy Streamlit UI to Hugging Face Spaces pointing at the Fly URL
-- [ ] End-to-end smoke test against production URLs
+**Plan changed during execution:** the API was deployed to HF Spaces (Docker-based, CPU basic, 2 vCPU / 16 GB RAM) instead of Fly.io — Spaces' larger free-tier RAM budget removed the pressure to fit both local ML models in 512 MB. `fly.toml` is left in the repo but is no longer the deploy target; see `ARCHITECTURE.md` and `README.md` for the current topology.
+
+- [x] Build Docker-based HF Space for the API; models baked into the image at build time (no runtime download)
+- [x] Set secrets: `GROQ_API_KEY`, `DATABASE_URL` (Neon pooled), `R2_*`, `LANGFUSE_*`, `HF_TOKEN` (for CI image build auth)
+- [x] Confirm `/health` + `/ready` green on the HF Space
+- [x] Deploy Streamlit UI to a second Hugging Face Space pointing at the API Space URL
+- [x] End-to-end smoke test against production URLs
 
 ## Day 13 — Hardening
 
 **Rate limiting & abuse**
 
 - [x] `slowapi` rate limiting: 30 req/min/IP on `/query` (aligned with Groq RPM cap), 5 req/min/IP on `/index`
-- [ ] Cap concurrent background ingestion jobs with `asyncio.Semaphore(3)` in `_run_ingestion` — prevents OOM on the 512 MB Fly VM from simultaneous download+embed+write pipelines
+- [x] Cap concurrent background ingestion jobs with `asyncio.Semaphore(3)` in `_run_ingestion` — prevents OOM from simultaneous download+embed+write pipelines
 
 **Input validation**
 
@@ -231,7 +233,7 @@ Full baseline: faithfulness=0.362, answer_relevancy=0.749, context_precision=0.2
 **SSRF hardening**
 
 - [x] Block IPv4-mapped IPv6 addresses (`::ffff:169.254.169.254` etc.) by unwrapping `addr.ipv4_mapped` before blocklist check in `_assert_ip_is_public`
-- [ ] DNS rebinding mitigation: resolve hostname once, assert IP, pass resolved IP directly to httpx with `Host` header — eliminates the second DNS lookup between validation and connect (low practical risk for v0.1 but required before prod)
+- [x] DNS rebinding mitigation: `_validate_url` resolves the hostname once and returns the validated IP; `_download` connects directly to that IP (`_pin_to_ip`) with the original hostname sent via the `Host` header and TLS SNI (`extensions={"sni_hostname": ...}`) — eliminates the second DNS lookup between validation and connect, re-validated fresh on every redirect hop
 - [x] SSRF guard already in place: `https`-only, RFC1918 + loopback + `169.254.0.0/16` blocklist, redirect re-validation, 50 MB streaming cap
 
 **PDF parsing safety**
@@ -248,10 +250,10 @@ Full baseline: faithfulness=0.362, answer_relevancy=0.749, context_precision=0.2
 
 ## Day 14 — Docs + Runbook
 
-- [ ] README rewrite: architecture diagram (Mermaid), env-var table, quickstart (`docker compose up`), deploy guide
-- [ ] `RUNBOOK.md` covering: Groq rate-limited, Neon sleeping/cold start, Langfuse down, vector DB full, indexing job stuck
-- [ ] `ARCHITECTURE.md` short doc explaining the RAG pipeline + retrieval strategy
-- [ ] Cut a `v0.1.0` git tag
+- [x] README rewrite: architecture diagram (Mermaid), env-var table, quickstart (`docker compose up`), deploy guide
+- [x] `RUNBOOK.md` covering: Groq rate-limited, Neon sleeping/cold start, Langfuse down, vector DB full, indexing job stuck
+- [x] `ARCHITECTURE.md` short doc explaining the RAG pipeline + retrieval strategy
+- [x] Cut a `v0.1.0` git tag
 
 ---
 
@@ -277,21 +279,20 @@ These are _real_ production needs but premature for week 1–2:
 | ------------- | --------------------------------- | ------------------------------------------------ |
 | Groq          | 30 RPM, ~1M tokens/day            | Eval runs + chat traffic combined                |
 | Neon          | 0.5 GB storage, 190 compute-hr/mo | Cold starts, vector growth                       |
-| Fly.io        | 3× shared-cpu-1x VMs              | Memory ceiling with sentence-transformers loaded |
 | R2            | 10 GB storage, 1M Class-A ops/mo  | Plenty for PDFs                                  |
-| HF Spaces     | Sleeps after 48h idle             | First request slow                               |
+| HF Spaces     | CPU basic (2 vCPU/16 GB), sleeps after 48h idle | Hosts both API and UI; replaced Fly.io as the API target; first request after sleep is slow |
 | Upstash Redis | 10k commands/day                  | Only if queue introduced                         |
 
 ---
 
 # Definition of Done (end of Week 2)
 
-- [ ] Public Fly.io URL serves `/health`, `/ready`, `/query`, `/index`
-- [ ] Public HF Spaces UI lets a user upload a PDF and chat with it
-- [ ] Langfuse trace exists for every request, with retrieval + LLM spans
-- [ ] CI green on `main`; image published to GHCR
-- [ ] Eval baseline committed; CI eval job runs (warn-only)
-- [ ] README + runbook adequate for someone else to deploy from scratch
-- [ ] Zero secrets in git; all config via env vars
-- [ ] No tracebacks returned to clients
-- [ ] Monthly cost: **$0**
+- [x] Public HF Spaces API URL serves `/health`, `/ready`, `/query`, `/index`
+- [x] Public HF Spaces UI lets a user index a PDF (via URL) and chat with it
+- [x] Langfuse trace exists for every request, with retrieval + LLM spans
+- [x] CI green on `main`; image published to GHCR
+- [ ] Eval baseline committed; CI eval job runs (warn-only) — baseline committed (`eval/baseline.json`); CI job still not wired, see Day 9
+- [x] README + runbook adequate for someone else to deploy from scratch
+- [x] Zero secrets in git; all config via env vars
+- [x] No tracebacks returned to clients
+- [x] Monthly cost: **$0**
