@@ -10,7 +10,16 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 # Replace CUDA-enabled torch with CPU-only wheel — cuts image by ~2 GB and
 # runtime RAM by ~250 MB. Must run after uv sync so it overwrites the lock-resolved wheel.
-RUN uv pip install torch --index-url https://download.pytorch.org/whl/cpu --reinstall --quiet
+# Version pinned to match uv.lock's torch (bump both together). The PyTorch CPU
+# index only mirrors setuptools up to 78.1.0, but torch>=2.13.0 requires >=83.0.0 —
+# --extra-index-url + unsafe-best-match lets that one resolve from PyPI instead
+# while torch itself still resolves to the +cpu build (pinned explicitly so
+# there's no ambiguity with the CUDA build PyPI hosts under the same version).
+RUN uv pip install torch==2.13.0+cpu \
+    --index-url https://download.pytorch.org/whl/cpu \
+    --extra-index-url https://pypi.org/simple \
+    --index-strategy unsafe-best-match \
+    --reinstall --quiet
 
 # Stage 2 — download HuggingFace models into a cache layer.
 # Baking models into the image means cold-start is seconds, not minutes.

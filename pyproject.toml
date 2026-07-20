@@ -34,6 +34,16 @@ ui = [
     "streamlit>=1.38",
 ]
 
+[tool.uv]
+# Transitive deps with published CVE fixes but no direct entry point to pin
+# them from — force the resolver to pick versions with the fix applied.
+# pillow: via ragas/streamlit; setuptools/torch: via sentence-transformers.
+constraint-dependencies = [
+    "pillow>=12.3.0",       # PYSEC-2026-2253/2254/2255/2256/2257, 3451/3452/3453
+    "setuptools>=83.0.0",   # PYSEC-2026-3447
+    "torch>=2.13.0",        # PYSEC-2025-194
+]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
