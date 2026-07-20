@@ -87,25 +87,32 @@ async def ingest_bytes(pdf_bytes: bytes, *, source_url: str) -> IngestResult:
     return IngestResult(doc_id=doc_id, skipped=False, chunk_count=len(chunks))
 
 
-async def _validate_url(url: str) -> None:
+async def _validate_url(url: str) -> tuple[str, str]:
+    """Validate url is safe to fetch. Returns (hostname, resolved_ip): the IP
+    validated here is the one _download must connect to — resolving again at
+    connect time would let DNS answer differently the second time (rebinding)."""
     parsed = urlparse(url)
     if parsed.scheme != "https":
         raise ValueError("Only https:// URLs are accepted")
     hostname = parsed.hostname
     if not hostname:
         raise ValueError("URL has no hostname")
-    await _assert_host_is_public(hostname)
+    ip = await _resolve_and_assert_host_is_public(hostname)
+    return hostname, ip
 
 
-async def _assert_host_is_public(hostname: str) -> None:
+async def _resolve_and_assert_host_is_public(hostname: str) -> str:
     # Bare IP submitted directly — check immediately without DNS lookup
     try:
-        _assert_ip_is_public(ip_address(hostname))
-        return
+        bare_addr = ip_address(hostname)
     except ValueError:
-        pass  # it's a domain name, not a bare IP
+        bare_addr = None
+    if bare_addr is not None:
+        _assert_ip_is_public(bare_addr)
+        return str(bare_addr)
 
-    # Resolve all DNS records and check every returned address.
+    # Resolve all DNS records and check every returned address, so a hostname
+    # can't sneak a blocked address in as one of several A/AAAA records.
     # run_in_executor offloads the blocking getaddrinfo call to a thread.
     loop = asyncio.get_running_loop()
     try:
@@ -113,8 +120,10 @@ async def _assert_host_is_public(hostname: str) -> None:
     except socket.gaierror as exc:
         raise ValueError(f"Cannot resolve hostname {hostname!r}") from exc
 
-    for *_, sockaddr in infos:
-        _assert_ip_is_public(ip_address(sockaddr[0]))
+    resolved = [ip_address(sockaddr[0]) for *_, sockaddr in infos]
+    for addr in resolved:
+        _assert_ip_is_public(addr)
+    return str(resolved[0])
 
 
 def _assert_ip_is_public(addr: IPv4Address | IPv6Address) -> None:
@@ -127,14 +136,30 @@ def _assert_ip_is_public(addr: IPv4Address | IPv6Address) -> None:
             raise ValueError(f"URL resolves to a blocked address ({addr})")
 
 
-async def _download(url: str) -> bytes:
-    await _validate_url(url)
+def _pin_to_ip(url: str, ip: str) -> str:
+    """Rewrite url's host to the already-validated IP, preserving scheme/port/path.
+    The caller must send the original hostname via the Host header and SNI —
+    connecting to a bare IP skips DNS (and thus rebinding) entirely."""
+    parsed = urlparse(url)
+    host = f"[{ip}]" if ":" in ip else ip
+    netloc = f"{host}:{parsed.port}" if parsed.port else host
+    return parsed._replace(netloc=netloc).geturl()
 
-    headers = {"User-Agent": "Mozilla/5.0 (compatible; AI-PDF-Assistant/1.0)"}
-    async with httpx.AsyncClient(follow_redirects=False, timeout=60.0, headers=headers) as client:
+
+async def _download(url: str) -> bytes:
+    hostname, ip = await _validate_url(url)
+
+    base_headers = {"User-Agent": "Mozilla/5.0 (compatible; AI-PDF-Assistant/1.0)"}
+    async with httpx.AsyncClient(follow_redirects=False, timeout=60.0) as client:
         current_url = url
         for hop in range(_MAX_REDIRECTS + 1):
-            async with client.stream("GET", current_url) as response:
+            request_headers = {**base_headers, "Host": hostname}
+            async with client.stream(
+                "GET",
+                _pin_to_ip(current_url, ip),
+                headers=request_headers,
+                extensions={"sni_hostname": hostname},
+            ) as response:
                 if response.is_redirect:
                     if hop == _MAX_REDIRECTS:
                         raise ValueError(f"Too many redirects (max {_MAX_REDIRECTS})")
@@ -143,7 +168,7 @@ async def _download(url: str) -> bytes:
                         raise ValueError("Redirect response missing Location header")
                     # urljoin handles both absolute and relative Location values
                     next_url = urljoin(current_url, location)
-                    await _validate_url(next_url)
+                    hostname, ip = await _validate_url(next_url)
                     current_url = next_url
                     continue  # exits this async with, re-enters loop with validated URL
 

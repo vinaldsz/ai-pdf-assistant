@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.ingest.pdf import _validate_url, ingest_bytes
+from app.ingest.pdf import _pin_to_ip, _validate_url, ingest_bytes
 
 # ---------------------------------------------------------------------------
 # _validate_url — scheme enforcement
@@ -69,6 +69,42 @@ async def test_rejects_ipv6_loopback():
 async def test_accepts_public_ip():
     # 93.184.216.34 is example.com — clearly public, no DNS lookup needed
     await _validate_url("https://93.184.216.34/file.pdf")
+
+
+# ---------------------------------------------------------------------------
+# _validate_url — returns the resolved IP so _download can pin the connection
+# to it, closing the DNS-rebinding gap between validation and connect.
+# ---------------------------------------------------------------------------
+
+
+async def test_validate_url_returns_hostname_and_ip_for_bare_ip():
+    hostname, ip = await _validate_url("https://93.184.216.34/file.pdf")
+    assert hostname == "93.184.216.34"
+    assert ip == "93.184.216.34"
+
+
+# ---------------------------------------------------------------------------
+# _pin_to_ip — rewrites the URL host to a pre-validated IP without touching
+# scheme, port, or path
+# ---------------------------------------------------------------------------
+
+
+def test_pin_to_ip_ipv4():
+    assert _pin_to_ip("https://example.com/file.pdf", "93.184.216.34") == (
+        "https://93.184.216.34/file.pdf"
+    )
+
+
+def test_pin_to_ip_preserves_explicit_port():
+    assert _pin_to_ip("https://example.com:8443/file.pdf", "93.184.216.34") == (
+        "https://93.184.216.34:8443/file.pdf"
+    )
+
+
+def test_pin_to_ip_ipv6_gets_bracketed():
+    assert _pin_to_ip("https://example.com/file.pdf", "2606:2800:220:1:1:1:1:1") == (
+        "https://[2606:2800:220:1:1:1:1:1]/file.pdf"
+    )
 
 
 # ---------------------------------------------------------------------------
